@@ -1,0 +1,25 @@
+{
+  "name": "server",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./app": "./src/app.ts"
+  },
+  "scripts": {
+    "dev": "node --import tsx --watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "import-backup": "node --import tsx src/import-backup.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.8",
+    "@hono/zod-validator": "^0.9.1",
+    "better-sqlite3": "^12.11.1",
+    "hono": "^4.13.19",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15"
+  }
+}
