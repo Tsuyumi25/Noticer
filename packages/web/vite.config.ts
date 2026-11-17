@@ -6,6 +6,7 @@ import VueRouter from 'vue-router/vite'
 export default defineConfig({
   plugins: [VueRouter({ dts: 'src/typed-router.d.ts' }), vue(), tailwindcss()],
   server: {
+    host: true,
     port: 5174,
     proxy: {
       '/api': 'http://localhost:3040',
