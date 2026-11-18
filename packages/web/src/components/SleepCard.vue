@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { SleepCard } from 'server/dashboard'
 import { computed } from 'vue'
-import { ACCENT, BACKGROUND, formatHours, STATUS_DOT, WAVE_SECONDS } from '../status.ts'
+import { ACCENT, BACKGROUND, formatHours, hasStatusIcon, WAVE_SECONDS } from '../status.ts'
+import StatusCorner from './StatusCorner.vue'
 import WaterSurface from './WaterSurface.vue'
 
 const props = defineProps<{ sleep: SleepCard }>()
@@ -32,10 +33,10 @@ const extra = computed(() => {
 
 const corner = computed(() => {
   const { state, status, hours } = props.sleep
-  if (state === 'awake') return STATUS_DOT[status] ? { kind: 'dot', text: STATUS_DOT[status] } : { kind: 'word', text: '快到了' }
-  if (status === 'pending') return { kind: 'word', text: '太短' }
-  if (status === 'good') return { kind: 'word', text: '睡夠了' }
-  return { kind: 'word', text: (hours ?? 0) >= 10 ? '太長' : '偏短' }
+  if (state === 'awake') return hasStatusIcon(status) ? { icon: status } : { word: '快到了' }
+  if (status === 'pending') return { word: '太短' }
+  if (status === 'good') return { word: '睡夠了' }
+  return { word: (hours ?? 0) >= 10 ? '太長' : '偏短' }
 })
 </script>
 
@@ -45,7 +46,7 @@ const corner = computed(() => {
       <div v-for="(h, i) in halves" :key="i" class="half" :class="{ lit: h.lit, other: sleep.state !== 'unknown' && !h.lit }">
         <template v-if="h.lit">
           <WaterSurface :height="100 - sleep.progress" :seconds="WAVE_SECONDS[sleep.status]" />
-          <span class="corner" :class="corner.kind">{{ corner.text }}</span>
+          <StatusCorner v-bind="corner" />
         </template>
         <div class="body">
           <div class="name">{{ h.name }}</div>
@@ -94,31 +95,6 @@ const corner = computed(() => {
 .other .emoji {
   opacity: 0.45;
   filter: grayscale(0.6);
-}
-.corner {
-  position: absolute;
-  top: 5px;
-  right: 6px;
-  z-index: 1;
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 16px;
-  color: var(--accent);
-}
-.corner.dot {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
-  text-align: center;
-}
-.corner.word {
-  padding: 0 4px;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: #fff;
 }
 .body {
   position: relative;

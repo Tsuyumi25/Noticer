@@ -20,7 +20,7 @@ export const BACKGROUND: Record<CardStatus, string> = {
 
 export const WAVE_SECONDS: Record<CardStatus, number> = { danger: 2, warning: 2.5, pending: 4, good: 10, unknown: 10 }
 
-export const STATUS_DOT: Partial<Record<CardStatus, string>> = { good: '✓', warning: '!', danger: '!!' }
+export const hasStatusIcon = (status: CardStatus) => status === 'good' || status === 'warning' || status === 'danger'
 
 /** ≤ 48 hours in 時, otherwise 天; one decimal, no trailing .0. */
 export function formatHours(hours: number | null): { value: string; unit: string } {

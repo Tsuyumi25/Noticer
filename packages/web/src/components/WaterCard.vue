@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { CardModel } from 'server/dashboard'
 import { computed } from 'vue'
-import { ACCENT, BACKGROUND, formatHours, STATUS_DOT, WAVE_SECONDS } from '../status.ts'
+import { ACCENT, BACKGROUND, formatHours, hasStatusIcon, WAVE_SECONDS } from '../status.ts'
 import DailyStrip from './DailyStrip.vue'
+import StatusCorner from './StatusCorner.vue'
 import WaterSurface from './WaterSurface.vue'
 
 const props = defineProps<{ card: CardModel }>()
@@ -13,11 +14,11 @@ const max = computed(() => formatHours(props.card.maxHours))
 /** Countdown cards get a corner symbol; everything else gets a status word. */
 const corner = computed(() => {
   const { mode, status } = props.card
-  if (mode === 'deadline' && STATUS_DOT[status]) return { kind: 'dot', text: STATUS_DOT[status] }
-  if (mode === null) return { kind: 'word', text: '沒有門檻' }
-  if (status === 'unknown') return { kind: 'word', text: '無記錄' }
-  if (mode === 'cooldown') return { kind: 'word', text: status === 'good' ? '可以了' : '太近' }
-  return { kind: 'word', text: '快到了' }
+  if (mode === 'deadline' && hasStatusIcon(status)) return { icon: status }
+  if (mode === null) return { word: '沒有門檻' }
+  if (status === 'unknown') return { word: '無記錄' }
+  if (mode === 'cooldown') return { word: status === 'good' ? '可以了' : '太近' }
+  return { word: '快到了' }
 })
 </script>
 
@@ -28,7 +29,7 @@ const corner = computed(() => {
     :style="{ '--accent': ACCENT[card.status], background: BACKGROUND[card.status] }"
   >
     <WaterSurface :height="100 - card.progress" :seconds="WAVE_SECONDS[card.status]" />
-    <span class="corner" :class="corner.kind">{{ corner.text }}</span>
+    <StatusCorner v-bind="corner" />
     <div class="body">
       <div class="name">{{ card.name }}</div>
       <div class="content">
@@ -63,31 +64,6 @@ const corner = computed(() => {
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45), rgba(15, 23, 42, 0.18) 0 4px 12px; }
   50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0), rgba(15, 23, 42, 0.18) 0 4px 12px; }
-}
-.corner {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  z-index: 1;
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 16px;
-  color: var(--accent);
-}
-.corner.dot {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 3px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #fff;
-  text-align: center;
-}
-.corner.word {
-  padding: 0 4px;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: #fff;
 }
 .body {
   position: relative;
