@@ -8,7 +8,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "import-backup": "pnpm --filter server import-backup"
+    "import-backup": "pnpm --filter server import-backup",
+    "pull-prod": "pnpm --filter server pull-prod"
   },
   "devDependencies": {
     "concurrently": "^10.0.7",

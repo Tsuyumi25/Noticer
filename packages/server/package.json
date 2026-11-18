@@ -3,12 +3,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./app": "./src/app.ts"
+    "./app": "./src/app.ts",
+    "./dashboard": "./src/dashboard.ts"
   },
   "scripts": {
     "dev": "node --import tsx --watch src/index.ts",
     "typecheck": "tsc --noEmit",
-    "import-backup": "node --import tsx src/import-backup.ts"
+    "import-backup": "node --import tsx src/import-backup.ts",
+    "pull-prod": "node --import tsx src/pull-prod.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",

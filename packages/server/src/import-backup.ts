@@ -1,8 +1,10 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { importMonths, monthFileSchema } from './backup.ts'
+import { z } from 'zod'
+import { importRecords, monthFileSchema } from './backup.ts'
+import { writeConfig } from './config.ts'
 import { openDb } from './db.ts'
-import { dbPath } from './paths.ts'
+import { configPath, dbPath } from './paths.ts'
 
 const dir = process.argv[2]
 if (!dir) {
@@ -10,10 +12,29 @@ if (!dir) {
   process.exit(1)
 }
 
-const months = readdirSync(dir)
+const records = readdirSync(dir)
   .filter((name) => /^\d{4}-\d{2}\.json$/.test(name))
   .sort()
-  .map((name) => monthFileSchema.parse(JSON.parse(readFileSync(join(dir, name), 'utf8'))))
+  .flatMap((name) => monthFileSchema.parse(JSON.parse(readFileSync(join(dir, name), 'utf8'))).records)
 
-const count = importMonths(openDb(dbPath), months)
-console.log(`Imported ${count} events from ${months.length} months into ${dbPath}`)
+const count = importRecords(openDb(dbPath), records)
+console.log(`Imported ${count} events into ${dbPath}`)
+
+const row = z.object({ id: z.string(), position: z.number(), config: z.string() }).passthrough()
+const snapshotSchema = z.object({
+  cards: z.array(row.extend({ tag: z.string(), tracker_id: z.string().nullable() })),
+  trackers_status: z.array(row.extend({ type: z.string() })),
+  trackers_periodic: z.array(row.extend({ type: z.string() })),
+})
+
+const snapshotPath = join(dir, 'config.json')
+if (existsSync(snapshotPath)) {
+  const snapshot = snapshotSchema.parse(JSON.parse(readFileSync(snapshotPath, 'utf8')))
+  const byPosition = <T extends { position: number }>(rows: T[]) => [...rows].sort((a, b) => a.position - b.position)
+  writeConfig(configPath, {
+    cards: byPosition(snapshot.cards).map((c) => ({ id: c.id, tag: c.tag, trackerId: c.tracker_id, ...JSON.parse(c.config) })),
+    trackersStatus: byPosition(snapshot.trackers_status).map((t) => ({ id: t.id, type: t.type, ...JSON.parse(t.config) })),
+    trackersPeriodic: byPosition(snapshot.trackers_periodic).map((t) => ({ id: t.id, type: t.type, ...JSON.parse(t.config) })),
+  })
+  console.log(`Wrote config to ${configPath}`)
+}

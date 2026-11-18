@@ -8,7 +8,7 @@ const factSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('boolean'), value: z.boolean() }),
 ])
 
-const recordSchema = z.object({
+export const recordSchema = z.object({
   id: z.number().int(),
   card_id: z.string(),
   created_at: z.iso.datetime({ offset: true }),
@@ -25,6 +25,7 @@ export const monthFileSchema = z.object({
   records: z.array(recordSchema),
 })
 
+export type BackupRecord = z.infer<typeof recordSchema>
 export type MonthFile = z.infer<typeof monthFileSchema>
 type Fact = z.infer<typeof factSchema>
 
@@ -39,7 +40,7 @@ function factToSql(fact: Fact): string | number | bigint {
   }
 }
 
-export function importMonths(db: DB, months: MonthFile[]): number {
+export function importRecords(db: DB, records: BackupRecord[]): number {
   const insertEvent = db.prepare(
     'INSERT INTO events (id, card_id, created_at, time_offset, note) VALUES (?, ?, ?, ?, ?)',
   )
@@ -56,29 +57,25 @@ export function importMonths(db: DB, months: MonthFile[]): number {
       DELETE FROM tags_dict;
     `)
     const tagIds = new Map<string, number>()
-    let count = 0
-    for (const month of months) {
-      for (const r of month.records) {
-        const createdAt = Date.parse(r.created_at) / 1000
-        if (createdAt + r.time_offset !== Date.parse(r.event_at) / 1000) {
-          throw new Error(`event ${r.id}: created_at + time_offset does not match event_at`)
+    for (const r of records) {
+      const createdAt = Date.parse(r.created_at) / 1000
+      if (createdAt + r.time_offset !== Date.parse(r.event_at) / 1000) {
+        throw new Error(`event ${r.id}: created_at + time_offset does not match event_at`)
+      }
+      insertEvent.run(r.id, r.card_id, createdAt, r.time_offset, r.note)
+      for (const name of new Set(r.tags)) {
+        let tagId = tagIds.get(name)
+        if (tagId === undefined) {
+          tagId = Number(insertTag.run(name).lastInsertRowid)
+          tagIds.set(name, tagId)
         }
-        insertEvent.run(r.id, r.card_id, createdAt, r.time_offset, r.note)
-        for (const name of new Set(r.tags)) {
-          let tagId = tagIds.get(name)
-          if (tagId === undefined) {
-            tagId = Number(insertTag.run(name).lastInsertRowid)
-            tagIds.set(name, tagId)
-          }
-          linkTag.run(r.id, tagId)
-        }
-        for (const [k, fact] of Object.entries(r.facts)) {
-          insertFact.run(r.id, k, fact.type, factToSql(fact))
-        }
-        count++
+        linkTag.run(r.id, tagId)
+      }
+      for (const [k, fact] of Object.entries(r.facts)) {
+        insertFact.run(r.id, k, fact.type, factToSql(fact))
       }
     }
-    return count
+    return records.length
   })
 
   return run()
