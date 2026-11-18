@@ -6,6 +6,7 @@ import StatusCorner from './StatusCorner.vue'
 import WaterSurface from './WaterSurface.vue'
 
 const props = defineProps<{ sleep: SleepCard }>()
+defineEmits<{ open: [card: { name: string; emoji: string }] }>()
 
 const halves = computed(() => {
   const s = props.sleep
@@ -43,7 +44,13 @@ const corner = computed(() => {
 <template>
   <div class="card" :style="{ '--accent': ACCENT[sleep.status], '--bg': BACKGROUND[sleep.status] }">
     <div class="row">
-      <div v-for="(h, i) in halves" :key="i" class="half" :class="{ lit: h.lit, other: sleep.state !== 'unknown' && !h.lit }">
+      <div
+        v-for="(h, i) in halves"
+        :key="i"
+        class="half cursor-pointer"
+        :class="{ lit: h.lit, other: sleep.state !== 'unknown' && !h.lit }"
+        @click="$emit('open', { name: h.name, emoji: h.emoji })"
+      >
         <template v-if="h.lit">
           <WaterSurface :height="100 - sleep.progress" :seconds="WAVE_SECONDS[sleep.status]" />
           <StatusCorner v-bind="corner" />

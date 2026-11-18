@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
+import { ref } from 'vue'
 import { api } from '../api.ts'
+import CheckinSheet from '../components/CheckinSheet.vue'
 import SleepCard from '../components/SleepCard.vue'
 import WaterCard from '../components/WaterCard.vue'
+
+const opened = ref<{ name: string; emoji: string } | null>(null)
 
 const { data, isPending, isError } = useQuery({
   queryKey: ['dashboard'],
@@ -23,22 +27,23 @@ const { data, isPending, isError } = useQuery({
     <template v-else-if="data">
       <template v-if="data.sleep">
         <h2 class="section">😴 作息</h2>
-        <SleepCard :sleep="data.sleep" />
+        <SleepCard :sleep="data.sleep" @open="opened = $event" />
       </template>
       <template v-if="data.urgent.length">
         <h2 class="section">⚠️ 需要注意</h2>
         <div class="grid grid-cols-2 gap-2">
-          <WaterCard v-for="card in data.urgent" :key="card.id" :card="card" />
+          <WaterCard v-for="card in data.urgent" :key="card.id" :card="card" class="cursor-pointer" @click="opened = card" />
         </div>
       </template>
       <template v-if="data.others.length">
         <h2 class="section">✅ 其他活動</h2>
         <div class="grid grid-cols-2 gap-2">
-          <WaterCard v-for="card in data.others" :key="card.id" :card="card" />
+          <WaterCard v-for="card in data.others" :key="card.id" :card="card" class="cursor-pointer" @click="opened = card" />
         </div>
       </template>
     </template>
   </main>
+  <CheckinSheet v-if="opened" :key="opened.name" :card="opened" @close="opened = null" />
   </div>
 </template>
 
