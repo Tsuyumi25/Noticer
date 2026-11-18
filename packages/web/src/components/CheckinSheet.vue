@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { useMutation, useQueryClient } from '@tanstack/vue-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ChevronRight, Clock, Pencil } from 'lucide-vue-next'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api.ts'
-import { t } from '../i18n/index.ts'
+import { locale, t } from '../i18n/index.ts'
 import { absoluteTime, relativeTime } from '../time.ts'
+import NumberInput from './NumberInput.vue'
 import TagPicker from './TagPicker.vue'
 import TimeOffsetPopup from './TimeOffsetPopup.vue'
 
@@ -12,7 +13,6 @@ export interface SheetCard {
   id: string
   name: string
   emoji: string
-  needsValue?: boolean
 }
 
 const props = defineProps<{ card: SheetCard }>()
@@ -35,11 +35,39 @@ const timeLabel = computed(() => {
   return `${relativeTime(happenedAt.value, now)} · ${absoluteTime(happenedAt.value, now)}`
 })
 
+const { data: inputs } = useQuery({
+  queryKey: computed(() => ['cardInputs', props.card.id]),
+  queryFn: async () => {
+    const res = await api.cards[':cardId'].inputs.$get({ param: { cardId: props.card.id } })
+    if (!res.ok) throw new Error(`inputs: ${res.status}`)
+    return res.json()
+  },
+})
+/** Null until this card's inputs load. */
+const values = ref<Record<string, number | string | null> | null>(null)
+let initialValues = ''
+watch(
+  inputs,
+  (list) => {
+    if (!list || values.value !== null) return
+    values.value = Object.fromEntries(
+      list.map((i) => [i.key, i.kind === 'number' ? (i.initial === 'last' ? (typeof i.last === 'number' ? i.last : null) : (i.initial ?? null)) : null]),
+    )
+    initialValues = JSON.stringify(values.value)
+  },
+  { immediate: true },
+)
+const missing = computed(() => (inputs.value ?? []).filter((i) => i.required && values.value?.[i.key] == null).map((i) => i.name))
+function pick(key: string, value: string) {
+  values.value![key] = values.value![key] === value ? null : value
+}
+
 const dirty = computed(
   () =>
     note.value.trim() !== '' ||
     happenedAt.value !== null ||
-    (tags.value !== null && [...tags.value].sort().join('\n') !== initialTags),
+    (tags.value !== null && [...tags.value].sort().join('\n') !== initialTags) ||
+    (values.value !== null && JSON.stringify(values.value) !== initialValues),
 )
 
 const editing = ref(false)
@@ -49,13 +77,15 @@ const queryClient = useQueryClient()
 const submit = useMutation({
   mutationFn: async () => {
     const timeOffset = happenedAt.value === null ? 0 : Math.min(0, Math.round((happenedAt.value - Date.now()) / 1000))
-    const res = await api.checkin.$post({ json: { cardId: props.card.id, note: note.value, tags: tags.value ?? [], timeOffset } })
+    const facts = Object.fromEntries(Object.entries(values.value ?? {}).filter((e): e is [string, number | string] => e[1] != null))
+    const res = await api.checkin.$post({ json: { cardId: props.card.id, note: note.value, tags: tags.value ?? [], timeOffset, facts } })
     if (!res.ok) throw new Error(t('sheet.submitFailed', { status: res.status }))
   },
   onSuccess: () => {
     queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     queryClient.invalidateQueries({ queryKey: ['events'] })
     queryClient.invalidateQueries({ queryKey: ['cardTags'] })
+    queryClient.invalidateQueries({ queryKey: ['cardInputs'] })
     leave()
   },
 })
@@ -198,6 +228,31 @@ onUnmounted(() => {
               {{ timeLabel }}<ChevronRight :size="18" class="text-zinc-400" />
             </span>
           </button>
+          <template v-for="input in values ? (inputs ?? []) : []" :key="input.key">
+            <NumberInput
+              v-if="input.kind === 'number'"
+              :input="input"
+              :model-value="values?.[input.key] as number | null"
+              @update:model-value="values![input.key] = $event"
+            />
+            <div v-else class="mt-3 mb-1">
+              <p class="mb-1.5 text-sm text-zinc-500">
+                {{ input.name }}<span v-if="!input.required"> · {{ t('fact.optional') }}</span>
+              </p>
+              <div class="grid gap-1.5" :style="{ gridTemplateColumns: `repeat(${input.options.length}, 1fr)` }">
+                <button
+                  v-for="o in input.options"
+                  :key="o.value"
+                  class="choice"
+                  :class="{ on: values?.[input.key] === o.value }"
+                  @click="pick(input.key, o.value)"
+                >
+                  <span class="text-[26px] leading-none">{{ o.value }}</span>
+                  <span class="text-xs">{{ o.label }}</span>
+                </button>
+              </div>
+            </div>
+          </template>
           <TagPicker ref="picker" :card-id="card.id" :editing="editing" :model-value="tags" @update:model-value="onTags" />
           <textarea
             v-model="note"
@@ -212,13 +267,15 @@ onUnmounted(() => {
             <button class="h-12 rounded-xl bg-indigo-600 font-semibold text-white" @click="editing = false">{{ t('common.done') }}</button>
           </div>
           <template v-else>
-            <p v-if="card.needsValue" class="mb-2 text-center text-sm text-zinc-500">{{ t('sheet.needsValue') }}</p>
+            <p v-if="missing.length" class="mb-2 text-center text-sm text-zinc-500">
+              {{ t('sheet.missing', { names: new Intl.ListFormat(locale).format(missing) }) }}
+            </p>
             <p v-else-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
             <div class="grid grid-cols-2 gap-3">
               <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
               <button
                 class="h-12 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
-                :disabled="card.needsValue || submit.isPending.value || leaving"
+                :disabled="values === null || missing.length > 0 || submit.isPending.value || leaving"
                 @click="submit.mutate()"
               >
                 {{ t('sheet.submit') }}
@@ -260,5 +317,22 @@ onUnmounted(() => {
     transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
     border-radius 0.3s cubic-bezier(0.32, 0.72, 0, 1),
     opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 64px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  color: #6b7280;
+}
+.choice.on {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #3730a3;
+  font-weight: 600;
 }
 </style>

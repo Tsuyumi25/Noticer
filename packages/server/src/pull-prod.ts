@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { importRecords, recordSchema, type BackupRecord } from './backup.ts'
-import { writeConfig } from './config.ts'
+import { writeConfig, type FactInput, type RawConfig } from './config.ts'
 import { openDb } from './db.ts'
 import { configPath, dbPath } from './paths.ts'
 
@@ -16,13 +16,39 @@ async function getJson(path: string): Promise<unknown> {
   return res.json()
 }
 
-const [cards, trackersStatus, trackersPeriodic, tagGroups] = await Promise.all([
+// The old app hard-wired one input component per value; here each becomes a fact the card declares.
+const FACT_INPUTS: Record<string, FactInput> = {
+  weight_kg: { kind: 'number', name: '體重', unit: 'kg', decimals: 1, min: 30, max: 200, steps: [0.1, 1], initial: 'last', required: true },
+  duration_min: { kind: 'number', name: '時長', unit: '分鐘', decimals: 0, min: 0, max: 600, steps: [1, 5], presets: [10, 15, 20, 30], initial: 20, required: true },
+  mood_emoji: {
+    kind: 'choice',
+    name: '心情',
+    options: [
+      { value: '😊', label: '很好' },
+      { value: '🙂', label: '不錯' },
+      { value: '😐', label: '普通' },
+      { value: '😔', label: '不好' },
+      { value: '😵', label: '很差' },
+    ],
+  },
+}
+const COMPONENT_FACTS: Record<string, string> = {
+  WeightActivityInput: 'weight_kg',
+  ExerciseActivityInput: 'duration_min',
+  WakeActivityInput: 'mood_emoji',
+}
+
+const [cards, trackersStatus, trackersPeriodic, tagGroups] = (await Promise.all([
   getJson('/api/config/cards'),
   getJson('/api/config/trackers/status'),
   getJson('/api/config/trackers/periodic'),
   getJson('/api/config/tags/roots'),
-])
-writeConfig(configPath, { cards, trackersStatus, trackersPeriodic, tagGroups })
+])) as [RawConfig['cards'], unknown, unknown, unknown]
+const mapped = cards.map(({ inputComponent, showMoodPicker, ...card }) => {
+  const fact = COMPONENT_FACTS[String(inputComponent)] ?? (showMoodPicker === true ? 'mood_emoji' : undefined)
+  return fact ? { ...card, facts: [fact] } : card
+})
+writeConfig(configPath, { cards: mapped, trackersStatus, trackersPeriodic, tagGroups, factInputs: FACT_INPUTS })
 console.log(`Wrote config to ${configPath}`)
 
 const historyPage = z.object({ data: z.array(recordSchema.passthrough()) })

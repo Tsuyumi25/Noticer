@@ -52,6 +52,30 @@ const periodicTrackerSchema = z.discriminatedUnion('type', [
   }),
 ])
 
+const numberInputSchema = z
+  .object({
+    kind: z.literal('number'),
+    name: z.string(),
+    unit: z.string(),
+    decimals: z.number().int().min(0).max(3),
+    min: z.number(),
+    max: z.number(),
+    steps: z.array(z.number().positive()).min(1),
+    presets: z.array(z.number()).optional(),
+    initial: z.union([z.number(), z.literal('last')]).optional(),
+    required: z.boolean().optional(),
+  })
+  .refine((i) => i.min <= i.max, { message: 'min must not exceed max' })
+
+const choiceInputSchema = z.object({
+  kind: z.literal('choice'),
+  name: z.string(),
+  options: z.array(z.object({ value: z.string(), label: z.string() })).min(1),
+  required: z.boolean().optional(),
+})
+
+const factInputSchema = z.discriminatedUnion('kind', [numberInputSchema, choiceInputSchema])
+
 const cardSchema = z.object({
   id: z.string(),
   tag: z.string(),
@@ -60,7 +84,8 @@ const cardSchema = z.object({
   hiddenTags: z.array(z.string()).optional(),
   emoji: z.string(),
   trackerId: z.string().nullable(),
-  inputComponent: z.string().optional(),
+  /** Keys into factInputs, in the order the sheet shows them. */
+  facts: z.array(z.string()).optional(),
 })
 
 const tagSchema = z.object({ label: z.string().trim().min(1), emoji: z.string() })
@@ -75,12 +100,21 @@ export const tagGroupsSchema = z
 
 const tagRootSchema = z.object({ emoji: z.string().optional(), groups: tagGroupsSchema })
 
-export const configSchema = z.object({
-  cards: z.array(cardSchema),
-  trackersStatus: z.array(statusTrackerSchema),
-  trackersPeriodic: z.array(periodicTrackerSchema),
-  tagGroups: z.record(z.string(), tagRootSchema).default({}),
-})
+export const configSchema = z
+  .object({
+    cards: z.array(cardSchema),
+    trackersStatus: z.array(statusTrackerSchema),
+    trackersPeriodic: z.array(periodicTrackerSchema),
+    tagGroups: z.record(z.string(), tagRootSchema).default({}),
+    factInputs: z.record(z.string(), factInputSchema).default({}),
+  })
+  .superRefine((config, ctx) => {
+    for (const card of config.cards) {
+      for (const key of card.facts ?? []) {
+        if (!(key in config.factInputs)) ctx.addIssue({ code: 'custom', message: `card ${card.id} uses unknown fact ${key}` })
+      }
+    }
+  })
 
 export type Config = z.infer<typeof configSchema>
 export type TagSource = z.infer<typeof tagSourceSchema>
@@ -89,12 +123,13 @@ export type StatusTrackerConfig = z.infer<typeof statusTrackerSchema>
 export type PeriodicTrackerConfig = z.infer<typeof periodicTrackerSchema>
 export type CompareStage = z.infer<typeof compareStageSchema>
 export type CardConfig = z.infer<typeof cardSchema>
+export type FactInput = z.infer<typeof factInputSchema>
 export type TagGroup = z.infer<typeof tagGroupsSchema>[number]
 export type RuleStatus = z.infer<typeof statusSchema>
 
-export const emptyConfig: Config = { cards: [], trackersStatus: [], trackersPeriodic: [], tagGroups: {} }
+export const emptyConfig: Config = { cards: [], trackersStatus: [], trackersPeriodic: [], tagGroups: {}, factInputs: {} }
 
-/** The file as stored: card entries keep fields this app does not model yet (memo, showMoodPicker…). */
+/** The file as stored: card entries keep fields this app does not model yet (memo…). */
 export type RawConfig = {
   cards: Array<{ id: string } & Record<string, unknown>>
   tagGroups?: Record<string, { emoji?: string; groups: unknown }>

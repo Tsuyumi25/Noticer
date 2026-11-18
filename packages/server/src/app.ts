@@ -1,11 +1,12 @@
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { createCheckin, needsValue } from './checkin.ts'
+import { createCheckin } from './checkin.ts'
 import { tagGroupsSchema, type ConfigStore } from './config.ts'
 import { buildDashboard } from './dashboard.ts'
 import type { DB } from './db.ts'
 import { listEvents } from './events.ts'
+import { cardInputs, readFacts } from './facts.ts'
 import { cardRoot, cardTags } from './tags.ts'
 
 type Env = { Variables: { db: DB; store: ConfigStore } }
@@ -25,6 +26,7 @@ const checkinBody = z.object({
   note: z.string(),
   tags: z.array(z.string()),
   timeOffset: z.number().int().max(0).optional(),
+  facts: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
 })
 
 const tagGroupsBody = z.object({ groups: tagGroupsSchema })
@@ -42,13 +44,15 @@ const api = new Hono<Env>()
     return c.json(buildDashboard(c.var.store.read(), listEvents(c.var.db, 0, now + 1), now))
   })
   .post('/checkin', zValidator('json', checkinBody), (c) => {
-    const { cardId, note, tags, timeOffset = 0 } = c.req.valid('json')
-    const card = c.var.store.read().cards.find((k) => k.id === cardId)
+    const { cardId, note, tags, timeOffset = 0, facts = {} } = c.req.valid('json')
+    const config = c.var.store.read()
+    const card = config.cards.find((k) => k.id === cardId)
     if (!card) return c.json({ error: `unknown card ${cardId}` }, 404)
-    if (needsValue(card)) return c.json({ error: `card ${cardId} needs a value input` }, 422)
+    const read = readFacts(config, card, facts)
+    if (!read.ok) return c.json({ error: read.error }, read.status)
     const trimmed = note.trim()
     const now = Math.floor(Date.now() / 1000)
-    const id = createCheckin(c.var.db, card, { note: trimmed === '' ? null : trimmed, picked: tags, now, timeOffset })
+    const id = createCheckin(c.var.db, card, { note: trimmed === '' ? null : trimmed, picked: tags, facts: read.rows, now, timeOffset })
     return c.json({ id }, 201)
   })
   .get('/cards/:cardId/tags', (c) => {
@@ -56,6 +60,12 @@ const api = new Hono<Env>()
     const card = config.cards.find((k) => k.id === c.req.param('cardId'))
     if (!card) return c.json({ error: 'unknown card' }, 404)
     return c.json(cardTags(c.var.db, config, card))
+  })
+  .get('/cards/:cardId/inputs', (c) => {
+    const config = c.var.store.read()
+    const card = config.cards.find((k) => k.id === c.req.param('cardId'))
+    if (!card) return c.json({ error: 'unknown card' }, 404)
+    return c.json(cardInputs(c.var.db, config, card))
   })
   .put('/cards/:cardId/tag-settings', zValidator('json', tagSettingsBody), (c) => {
     const cardId = c.req.param('cardId')

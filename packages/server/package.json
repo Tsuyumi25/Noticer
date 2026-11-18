@@ -5,6 +5,7 @@
   "exports": {
     "./app": "./src/app.ts",
     "./dashboard": "./src/dashboard.ts",
+    "./facts": "./src/facts.ts",
     "./tags": "./src/tags.ts"
   },
   "scripts": {

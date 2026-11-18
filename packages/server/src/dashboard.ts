@@ -1,4 +1,3 @@
-import { needsValue } from './checkin.ts'
 import type { Config } from './config.ts'
 import type { EventRecord } from './events.ts'
 import { evaluateSleep, SLEEP_CARD, WAKE_CARD, type SleepPair } from './sleep.ts'
@@ -14,7 +13,6 @@ export interface CardModel {
   nowHours: number | null
   maxHours: number | null
   strip: DailyStrip | null
-  needsValue: boolean
 }
 
 export interface SleepCard extends SleepPair {
@@ -54,7 +52,6 @@ export function buildDashboard(config: Config, events: EventRecord[], now: numbe
         id: card.id,
         name: card.tag,
         emoji: card.emoji,
-        needsValue: needsValue(card),
         status: result?.status ?? 'unknown',
         mode: tracker?.type ?? null,
         progress: result?.progress ?? 0,

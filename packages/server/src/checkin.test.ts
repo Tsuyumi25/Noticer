@@ -10,10 +10,16 @@ const config = {
   cards: [
     { id: 'skincare', tag: '護膚', emoji: '🧴', trackerId: null },
     { id: 'sunscreen', tag: '防曬', bucket: '護膚', emoji: '🌞', trackerId: null, hiddenTags: ['化妝水'] },
-    { id: 'weight', tag: '體重', emoji: '⚖️', trackerId: null, inputComponent: 'WeightActivityInput' },
+    { id: 'weight', tag: '體重', emoji: '⚖️', trackerId: null, facts: ['weight_kg'] },
+    { id: 'practice', tag: '練習', emoji: '🎹', trackerId: null, facts: ['duration_min', 'mood_emoji'] },
   ],
   tagGroups: {
     護膚: { emoji: '🧴', groups: [{ name: '保養項目', color: '#3b82f6', tags: [{ label: '化妝水', emoji: '🧴' }, { label: '防曬', emoji: '🌞' }] }] },
+  },
+  factInputs: {
+    weight_kg: { kind: 'number', name: '體重', unit: 'kg', decimals: 1, min: 30, max: 200, steps: [0.1], initial: 'last', required: true },
+    duration_min: { kind: 'number', name: '時長', unit: '分鐘', decimals: 0, min: 0, max: 600, steps: [5] },
+    mood_emoji: { kind: 'choice', name: '心情', options: [{ value: '🙂', label: '不錯' }] },
   },
 }
 
@@ -53,11 +59,47 @@ describe('checkin', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM tags_dict').get()).toEqual({ n: 1 })
   })
 
-  it('refuses unknown cards and cards whose value input is missing', async () => {
+  it('refuses unknown cards and a missing required value', async () => {
     const { db, send } = setup()
     expect((await send('POST', '/api/checkin', { cardId: 'nope', note: '', tags: [] })).status).toBe(404)
     expect((await send('POST', '/api/checkin', { cardId: 'weight', note: '', tags: [] })).status).toBe(422)
     expect(allEvents(db)).toEqual([])
+  })
+})
+
+describe('facts', () => {
+  it('stores decimal inputs as reals even when whole, integer inputs as integers, and choices as text', async () => {
+    const { db, send } = setup()
+    await send('POST', '/api/checkin', { cardId: 'weight', note: '', tags: [], facts: { weight_kg: 50 } })
+    await send('POST', '/api/checkin', { cardId: 'practice', note: '', tags: [], facts: { duration_min: 20, mood_emoji: '🙂' } })
+    expect(db.prepare('SELECT k, type, typeof(value) AS stored, value FROM checkin_facts ORDER BY checkin_id, k').all()).toEqual([
+      { k: 'weight_kg', type: 'real', stored: 'real', value: 50 },
+      { k: 'duration_min', type: 'integer', stored: 'integer', value: 20 },
+      { k: 'mood_emoji', type: 'text', stored: 'text', value: '🙂' },
+    ])
+  })
+
+  it('rejects values outside the range, with extra decimals, off the options, or for another card', async () => {
+    const { db, send } = setup()
+    const post = (cardId: string, facts: Record<string, unknown>) => send('POST', '/api/checkin', { cardId, note: '', tags: [], facts })
+    expect((await post('weight', { weight_kg: 201 })).status).toBe(400)
+    expect((await post('weight', { weight_kg: 50.25 })).status).toBe(400)
+    expect((await post('practice', { duration_min: 20, mood_emoji: '😵' })).status).toBe(400)
+    expect((await post('weight', { weight_kg: 50, duration_min: 20 })).status).toBe(400)
+    expect((await post('practice', {})).status).toBe(201)
+    expect(allEvents(db)).toHaveLength(1)
+  })
+
+  it("offers the value of the latest event by when it happened, not by when it was entered", async () => {
+    const { send } = setup()
+    await send('POST', '/api/checkin', { cardId: 'weight', note: '', tags: [], facts: { weight_kg: 50.4 } })
+    await send('POST', '/api/checkin', { cardId: 'weight', note: '', tags: [], facts: { weight_kg: 53 }, timeOffset: -86400 })
+    const inputs = await (await send('GET', '/api/cards/weight/inputs')).json()
+    expect(inputs).toEqual([expect.objectContaining({ key: 'weight_kg', kind: 'number', last: 50.4 })])
+  })
+
+  it('refuses a config whose card names an undefined fact', () => {
+    expect(() => memoryStore({ ...config, cards: [{ id: 'x', tag: 'x', emoji: 'x', trackerId: null, facts: ['nope'] }] }).read()).toThrow(/unknown fact nope/)
   })
 })
 
