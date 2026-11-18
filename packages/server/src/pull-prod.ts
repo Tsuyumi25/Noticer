@@ -16,12 +16,13 @@ async function getJson(path: string): Promise<unknown> {
   return res.json()
 }
 
-const [cards, trackersStatus, trackersPeriodic] = await Promise.all([
+const [cards, trackersStatus, trackersPeriodic, tagGroups] = await Promise.all([
   getJson('/api/config/cards'),
   getJson('/api/config/trackers/status'),
   getJson('/api/config/trackers/periodic'),
+  getJson('/api/config/tags/roots'),
 ])
-writeConfig(configPath, { cards, trackersStatus, trackersPeriodic })
+writeConfig(configPath, { cards, trackersStatus, trackersPeriodic, tagGroups })
 console.log(`Wrote config to ${configPath}`)
 
 const historyPage = z.object({ data: z.array(recordSchema.passthrough()) })

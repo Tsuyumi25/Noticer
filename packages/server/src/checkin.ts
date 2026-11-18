@@ -8,12 +8,12 @@ export function needsValue(card: CardConfig): boolean {
   return VALUE_INPUTS.has(card.inputComponent ?? '')
 }
 
-/** Without a tag picker yet, an untouched form saves the card's identity tags plus its preselected ones. */
-export function checkinTags(card: CardConfig): string[] {
-  return [...new Set([card.tag, ...(card.bucket ? [card.bucket] : []), ...(card.defaultTags ?? [])])]
+export function checkinTags(card: CardConfig, picked: string[]): string[] {
+  const chosen = picked.map((t) => t.trim()).filter((t) => t !== '')
+  return [...new Set([card.tag, ...(card.bucket ? [card.bucket] : []), ...chosen])]
 }
 
-export function createCheckin(db: DB, card: CardConfig, note: string | null, now: number): number {
+export function createCheckin(db: DB, card: CardConfig, note: string | null, picked: string[], now: number): number {
   const insertEvent = db.prepare('INSERT INTO events (card_id, created_at, note) VALUES (?, ?, ?)')
   const findTag = db.prepare<[string], { id: number }>('SELECT id FROM tags_dict WHERE name = ? ORDER BY id LIMIT 1')
   const insertTag = db.prepare('INSERT INTO tags_dict (name) VALUES (?)')
@@ -21,7 +21,7 @@ export function createCheckin(db: DB, card: CardConfig, note: string | null, now
 
   return db.transaction(() => {
     const id = Number(insertEvent.run(card.id, now, note).lastInsertRowid)
-    for (const name of checkinTags(card)) {
+    for (const name of checkinTags(card, picked)) {
       const tagId = findTag.get(name)?.id ?? Number(insertTag.run(name).lastInsertRowid)
       linkTag.run(id, tagId)
     }

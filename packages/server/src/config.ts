@@ -57,15 +57,29 @@ const cardSchema = z.object({
   tag: z.string(),
   bucket: z.string().optional(),
   defaultTags: z.array(z.string()).optional(),
+  hiddenTags: z.array(z.string()).optional(),
   emoji: z.string(),
   trackerId: z.string().nullable(),
   inputComponent: z.string().optional(),
 })
 
+const tagSchema = z.object({ label: z.string().trim().min(1), emoji: z.string() })
+
+export const tagGroupsSchema = z
+  .array(z.object({ name: z.string().trim().min(1), color: z.string(), tags: z.array(tagSchema) }))
+  .refine((groups) => new Set(groups.map((g) => g.name)).size === groups.length, { message: 'group names must be unique' })
+  .refine((groups) => {
+    const labels = groups.flatMap((g) => g.tags.map((t) => t.label))
+    return new Set(labels).size === labels.length
+  }, { message: 'a tag can only be in one group' })
+
+const tagRootSchema = z.object({ emoji: z.string().optional(), groups: tagGroupsSchema })
+
 export const configSchema = z.object({
   cards: z.array(cardSchema),
   trackersStatus: z.array(statusTrackerSchema),
   trackersPeriodic: z.array(periodicTrackerSchema),
+  tagGroups: z.record(z.string(), tagRootSchema).default({}),
 })
 
 export type Config = z.infer<typeof configSchema>
@@ -75,9 +89,22 @@ export type StatusTrackerConfig = z.infer<typeof statusTrackerSchema>
 export type PeriodicTrackerConfig = z.infer<typeof periodicTrackerSchema>
 export type CompareStage = z.infer<typeof compareStageSchema>
 export type CardConfig = z.infer<typeof cardSchema>
+export type TagGroup = z.infer<typeof tagGroupsSchema>[number]
 export type RuleStatus = z.infer<typeof statusSchema>
 
-export const emptyConfig: Config = { cards: [], trackersStatus: [], trackersPeriodic: [] }
+export const emptyConfig: Config = { cards: [], trackersStatus: [], trackersPeriodic: [], tagGroups: {} }
+
+/** The file as stored: card entries keep fields this app does not model yet (memo, showMoodPicker…). */
+export type RawConfig = {
+  cards: Array<{ id: string } & Record<string, unknown>>
+  tagGroups?: Record<string, { emoji?: string; groups: unknown }>
+} & Record<string, unknown>
+
+export interface ConfigStore {
+  read(): Config
+  /** Applies an edit to the raw file content, validates it, and persists it. */
+  update(edit: (raw: RawConfig) => void): Config
+}
 
 export function readConfig(path: string): Config {
   if (!existsSync(path)) return emptyConfig
@@ -88,4 +115,29 @@ export function writeConfig(path: string, raw: unknown): Config {
   const config = configSchema.parse(raw)
   writeFileSync(path, JSON.stringify(raw, null, 2))
   return config
+}
+
+export function fileStore(path: string): ConfigStore {
+  return {
+    read: () => readConfig(path),
+    update(edit) {
+      const raw: RawConfig = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : structuredClone(emptyConfig)
+      edit(raw)
+      return writeConfig(path, raw)
+    },
+  }
+}
+
+export function memoryStore(initial: unknown): ConfigStore {
+  let raw = structuredClone(initial) as RawConfig
+  return {
+    read: () => configSchema.parse(raw),
+    update(edit) {
+      const next = structuredClone(raw)
+      edit(next)
+      const config = configSchema.parse(next)
+      raw = next
+      return config
+    },
+  }
 }

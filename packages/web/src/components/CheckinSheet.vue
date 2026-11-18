@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
+import { Pencil } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '../api.ts'
+import TagPicker from './TagPicker.vue'
 
 export interface SheetCard {
   id: string
@@ -14,17 +16,30 @@ const props = defineProps<{ card: SheetCard }>()
 const emit = defineEmits<{ close: [] }>()
 
 const note = ref('')
-const dirty = computed(() => note.value.trim() !== '')
+/** Null until the picker loads this card's preselected tags. */
+const tags = ref<string[] | null>(null)
+let initialTags: string | null = null
+function onTags(next: string[]) {
+  if (tags.value === null) initialTags = [...next].sort().join('\n')
+  tags.value = next
+}
+const dirty = computed(
+  () => note.value.trim() !== '' || (tags.value !== null && [...tags.value].sort().join('\n') !== initialTags),
+)
+
+const editing = ref(false)
+const picker = ref<InstanceType<typeof TagPicker> | null>(null)
 
 const queryClient = useQueryClient()
 const submit = useMutation({
   mutationFn: async () => {
-    const res = await api.checkin.$post({ json: { cardId: props.card.id, note: note.value } })
+    const res = await api.checkin.$post({ json: { cardId: props.card.id, note: note.value, tags: tags.value ?? [] } })
     if (!res.ok) throw new Error(`送出失敗（${res.status}）`)
   },
   onSuccess: () => {
     queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     queryClient.invalidateQueries({ queryKey: ['events'] })
+    queryClient.invalidateQueries({ queryKey: ['cardTags'] })
     leave()
   },
 })
@@ -80,7 +95,9 @@ function atTop(target: EventTarget | null): boolean {
 function onTouchStart(e: TouchEvent) {
   const touch = e.touches[0]
   if (confirming.value || leaving.value || !touch || e.touches.length > 1) return
-  dragging = atTop(e.target)
+  // While editing, a press on a tag may become a drag; it must not pull the sheet.
+  const onTag = editing.value && (e.target as Element).closest('[data-tag]')
+  dragging = !onTag && atTop(e.target)
   startY = touch.clientY
   startTime = e.timeStamp
 }
@@ -145,28 +162,43 @@ onUnmounted(() => {
         @transitionend="onTransitionEnd"
       >
         <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
-        <h2 class="shrink-0 px-4 py-2 text-lg font-semibold">{{ card.emoji }} {{ card.name }}</h2>
+        <div class="flex shrink-0 items-center justify-between py-1 pr-2 pl-4">
+          <h2 class="text-lg font-semibold">
+            {{ card.emoji }} {{ card.name }}<span v-if="editing" class="text-sm font-medium text-amber-700"> · 編輯中</span>
+          </h2>
+          <button v-if="editing" class="h-11 min-w-11 px-2 font-semibold text-indigo-600" @click="editing = false">完成</button>
+          <button v-else class="flex h-11 min-w-11 items-center gap-1 px-2 text-zinc-400" @click="editing = true">
+            <Pencil :size="16" />編輯
+          </button>
+        </div>
         <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+          <TagPicker ref="picker" :card-id="card.id" :editing="editing" :model-value="tags" @update:model-value="onTags" />
           <textarea
             v-model="note"
             rows="4"
             placeholder="備註…"
-            class="w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
+            class="mt-4 w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
           />
         </div>
         <footer class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          <p v-if="card.needsValue" class="mb-2 text-center text-sm text-zinc-500">數值輸入還沒做，暫時不能送出</p>
-          <p v-else-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
-          <div class="grid grid-cols-2 gap-3">
-            <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">取消</button>
-            <button
-              class="h-12 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
-              :disabled="card.needsValue || submit.isPending.value || leaving"
-              @click="submit.mutate()"
-            >
-              送出
-            </button>
+          <div v-if="editing" class="grid grid-cols-2 gap-3">
+            <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="picker?.addGroup()">＋ 添加分組</button>
+            <button class="h-12 rounded-xl bg-indigo-600 font-semibold text-white" @click="editing = false">完成</button>
           </div>
+          <template v-else>
+            <p v-if="card.needsValue" class="mb-2 text-center text-sm text-zinc-500">數值輸入還沒做，暫時不能送出</p>
+            <p v-else-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
+            <div class="grid grid-cols-2 gap-3">
+              <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">取消</button>
+              <button
+                class="h-12 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
+                :disabled="card.needsValue || submit.isPending.value || leaving"
+                @click="submit.mutate()"
+              >
+                送出
+              </button>
+            </div>
+          </template>
         </footer>
       </section>
 
