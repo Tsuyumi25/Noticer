@@ -3,10 +3,10 @@ import type { SleepCard } from 'server/dashboard'
 import { computed } from 'vue'
 import { ACCENT, BACKGROUND, formatHours, hasStatusIcon, WAVE_SECONDS } from '../status.ts'
 import StatusCorner from './StatusCorner.vue'
+import type { SheetCard } from './CheckinSheet.vue'
 import WaterSurface from './WaterSurface.vue'
-
 const props = defineProps<{ sleep: SleepCard }>()
-defineEmits<{ open: [card: { name: string; emoji: string }] }>()
+defineEmits<{ open: [card: SheetCard] }>()
 
 const halves = computed(() => {
   const s = props.sleep
@@ -49,7 +49,7 @@ const corner = computed(() => {
         :key="i"
         class="half cursor-pointer"
         :class="{ lit: h.lit, other: sleep.state !== 'unknown' && !h.lit }"
-        @click="$emit('open', { name: h.name, emoji: h.emoji })"
+        @click="$emit('open', { id: h.id, name: h.name, emoji: h.emoji })"
       >
         <template v-if="h.lit">
           <WaterSurface :height="100 - sleep.progress" :seconds="WAVE_SECONDS[sleep.status]" />

@@ -1,3 +1,4 @@
+import { needsValue } from './checkin.ts'
 import type { Config } from './config.ts'
 import type { EventRecord } from './events.ts'
 import { evaluateSleep, SLEEP_CARD, WAKE_CARD, type SleepPair } from './sleep.ts'
@@ -14,11 +15,12 @@ export interface CardModel {
   maxHours: number | null
   summary: string
   strip: DailyStrip | null
+  needsValue: boolean
 }
 
 export interface SleepCard extends SleepPair {
-  sleepCard: { name: string; emoji: string }
-  wakeCard: { name: string; emoji: string }
+  sleepCard: { id: string; name: string; emoji: string }
+  wakeCard: { id: string; name: string; emoji: string }
 }
 
 export interface Dashboard {
@@ -53,6 +55,7 @@ export function buildDashboard(config: Config, events: EventRecord[], now: numbe
         id: card.id,
         name: card.tag,
         emoji: card.emoji,
+        needsValue: needsValue(card),
         status: result?.status ?? 'unknown',
         mode: tracker?.type ?? null,
         progress: result?.progress ?? 0,
@@ -72,8 +75,8 @@ export function buildDashboard(config: Config, events: EventRecord[], now: numbe
     sleep: hasSleep
       ? {
           ...evaluateSleep(events, now),
-          sleepCard: { name: sleepCard.tag, emoji: sleepCard.emoji },
-          wakeCard: { name: wakeCard.tag, emoji: wakeCard.emoji },
+          sleepCard: { id: sleepCard.id, name: sleepCard.tag, emoji: sleepCard.emoji },
+          wakeCard: { id: wakeCard.id, name: wakeCard.tag, emoji: wakeCard.emoji },
         }
       : null,
     urgent: cards.filter((c) => c.status === 'danger' || c.status === 'warning'),

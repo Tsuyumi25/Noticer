@@ -1,12 +1,33 @@
 <script setup lang="ts">
-import { X } from 'lucide-vue-next'
+import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { api } from '../api.ts'
 
-defineProps<{ card: { name: string; emoji: string } }>()
+export interface SheetCard {
+  id: string
+  name: string
+  emoji: string
+  needsValue?: boolean
+}
+
+const props = defineProps<{ card: SheetCard }>()
 const emit = defineEmits<{ close: [] }>()
 
 const note = ref('')
 const dirty = computed(() => note.value.trim() !== '')
+
+const queryClient = useQueryClient()
+const submit = useMutation({
+  mutationFn: async () => {
+    const res = await api.checkin.$post({ json: { cardId: props.card.id, note: note.value } })
+    if (!res.ok) throw new Error(`送出失敗（${res.status}）`)
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    queryClient.invalidateQueries({ queryKey: ['events'] })
+    leave()
+  },
+})
 
 /** How far the sheet is pushed below full screen, in px; 0 means full screen. */
 const offset = ref(window.innerHeight)
@@ -124,13 +145,8 @@ onUnmounted(() => {
         @transitionend="onTransitionEnd"
       >
         <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
-        <header class="flex shrink-0 items-center gap-1 px-1">
-          <button class="grid size-11 place-items-center text-zinc-500" aria-label="關閉" @click="requestClose">
-            <X :size="22" />
-          </button>
-          <h2 class="text-lg font-semibold">{{ card.emoji }} {{ card.name }}</h2>
-        </header>
-        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <h2 class="shrink-0 px-4 py-2 text-lg font-semibold">{{ card.emoji }} {{ card.name }}</h2>
+        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
           <textarea
             v-model="note"
             rows="4"
@@ -138,6 +154,20 @@ onUnmounted(() => {
             class="w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
           />
         </div>
+        <footer class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <p v-if="card.needsValue" class="mb-2 text-center text-sm text-zinc-500">數值輸入還沒做，暫時不能送出</p>
+          <p v-else-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
+          <div class="grid grid-cols-2 gap-3">
+            <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">取消</button>
+            <button
+              class="h-12 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
+              :disabled="card.needsValue || submit.isPending.value || leaving"
+              @click="submit.mutate()"
+            >
+              送出
+            </button>
+          </div>
+        </footer>
       </section>
 
       <div v-if="confirming" class="absolute inset-0 flex items-end bg-black/40" @click.self="confirming = false">

@@ -2,11 +2,11 @@
 import { useQuery } from '@tanstack/vue-query'
 import { ref } from 'vue'
 import { api } from '../api.ts'
-import CheckinSheet from '../components/CheckinSheet.vue'
+import CheckinSheet, { type SheetCard } from '../components/CheckinSheet.vue'
 import SleepCard from '../components/SleepCard.vue'
 import WaterCard from '../components/WaterCard.vue'
 
-const opened = ref<{ name: string; emoji: string } | null>(null)
+const opened = ref<SheetCard | null>(null)
 
 const { data, isPending, isError } = useQuery({
   queryKey: ['dashboard'],

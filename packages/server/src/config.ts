@@ -55,8 +55,11 @@ const periodicTrackerSchema = z.discriminatedUnion('type', [
 const cardSchema = z.object({
   id: z.string(),
   tag: z.string(),
+  bucket: z.string().optional(),
+  defaultTags: z.array(z.string()).optional(),
   emoji: z.string(),
   trackerId: z.string().nullable(),
+  inputComponent: z.string().optional(),
 })
 
 export const configSchema = z.object({
@@ -71,6 +74,7 @@ export type TrackerSource = z.infer<typeof sourceSchema>
 export type StatusTrackerConfig = z.infer<typeof statusTrackerSchema>
 export type PeriodicTrackerConfig = z.infer<typeof periodicTrackerSchema>
 export type CompareStage = z.infer<typeof compareStageSchema>
+export type CardConfig = z.infer<typeof cardSchema>
 export type RuleStatus = z.infer<typeof statusSchema>
 
 export const emptyConfig: Config = { cards: [], trackersStatus: [], trackersPeriodic: [] }
