@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { SleepCard } from 'server/dashboard'
 import { computed } from 'vue'
+import { t } from '../i18n/index.ts'
 import { ACCENT, BACKGROUND, formatHours, hasStatusIcon, WAVE_SECONDS } from '../status.ts'
+import { clock } from '../time.ts'
 import StatusCorner from './StatusCorner.vue'
 import type { SheetCard } from './CheckinSheet.vue'
 import WaterSurface from './WaterSurface.vue'
@@ -12,8 +14,8 @@ const halves = computed(() => {
   const s = props.sleep
   const lit = s.state === 'awake' ? 0 : s.state === 'asleep' ? 1 : -1
   return [
-    { ...s.sleepCard, lit: lit === 0, backfill: '或者補記睡眠時間？', ask: '現在是睡著？' },
-    { ...s.wakeCard, lit: lit === 1, backfill: '或者補記起床時間？', ask: '現在是醒著？' },
+    { ...s.sleepCard, lit: lit === 0, backfill: t('sleep.backfillSleep'), ask: t('sleep.askAsleep') },
+    { ...s.wakeCard, lit: lit === 1, backfill: t('sleep.backfillWake'), ask: t('sleep.askAwake') },
   ]
 })
 
@@ -24,20 +26,20 @@ const extra = computed(() => {
   const s = props.sleep
   if (s.state !== 'awake') return []
   const lines: string[] = []
-  if (s.lastSleepHours != null) lines.push(`昨晚睡了 ${formatHours(s.lastSleepHours).value}時`)
-  if (s.predictedSleepAt != null) {
-    const at = new Date(s.predictedSleepAt * 1000).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })
-    lines.push(`預測 ${at} 想睡`)
+  if (s.lastSleepHours != null) {
+    const { value, unit } = formatHours(s.lastSleepHours)
+    lines.push(t('sleep.lastNight', { duration: `${value}${unit}` }))
   }
+  if (s.predictedSleepAt != null) lines.push(t('sleep.predicted', { time: clock(s.predictedSleepAt * 1000) }))
   return lines
 })
 
 const corner = computed(() => {
   const { state, status, hours } = props.sleep
-  if (state === 'awake') return hasStatusIcon(status) ? { icon: status } : { word: '快到了' }
-  if (status === 'pending') return { word: '太短' }
-  if (status === 'good') return { word: '睡夠了' }
-  return { word: (hours ?? 0) >= 10 ? '太長' : '偏短' }
+  if (state === 'awake') return hasStatusIcon(status) ? { icon: status } : { word: t('card.almostDue') }
+  if (status === 'pending') return { word: t('sleep.tooShort') }
+  if (status === 'good') return { word: t('sleep.enough') }
+  return { word: (hours ?? 0) >= 10 ? t('sleep.tooLong') : t('sleep.bitShort') }
 })
 </script>
 
@@ -60,7 +62,7 @@ const corner = computed(() => {
           <div class="content">
             <span class="emoji">{{ h.emoji }}</span>
             <div v-if="h.lit" class="time">
-              <div class="label">{{ sleep.state === 'awake' ? '已醒' : '已睡' }}</div>
+              <div class="label">{{ sleep.state === 'awake' ? t('sleep.awakeFor') : t('sleep.asleepFor') }}</div>
               <div class="now">{{ now.value }}<small>{{ now.unit }}</small></div>
               <div class="rule" />
               <div class="max">{{ max.value }}<small>{{ max.unit }}</small></div>

@@ -1,7 +1,7 @@
+import { locale, t, tn } from './i18n/index.ts'
+
 export const MINUTE = 60_000
 export const DAY = 86_400_000
-
-const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 
 export const floorMinute = (ms: number) => Math.floor(ms / MINUTE) * MINUTE
 
@@ -17,27 +17,39 @@ export const clock = (ms: number) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export const weekday = (ms: number) => WEEKDAYS[new Date(ms).getDay()]!
+export const weekday = (ms: number) => new Intl.DateTimeFormat(locale.value, { weekday: 'short' }).format(ms)
 
-/** 今天／昨天／前天, otherwise the date (with the year once it is a different year). */
+/** Month, day and weekday in the reader's language, with the year when asked. */
+export const date = (ms: number, withYear = false) =>
+  new Intl.DateTimeFormat(locale.value, {
+    year: withYear ? 'numeric' : undefined,
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(ms)
+
+/** Today, yesterday, the day before, otherwise the date (with the year once it is a different year). */
 export function dayName(ms: number, now: number): string {
   const days = Math.round((startOfDay(now) - startOfDay(ms)) / DAY)
-  if (days === 0) return '今天'
-  if (days === 1) return '昨天'
-  if (days === 2) return '前天'
-  const d = new Date(ms)
-  const year = d.getFullYear() === new Date(now).getFullYear() ? '' : `${d.getFullYear()}/`
-  return `${year}${d.getMonth() + 1}/${d.getDate()}（${weekday(ms)}）`
+  if (days === 0) return t('time.today')
+  if (days === 1) return t('time.yesterday')
+  if (days === 2) return t('time.dayBefore')
+  return date(ms, new Date(ms).getFullYear() !== new Date(now).getFullYear())
 }
 
 export const absoluteTime = (ms: number, now: number) => `${dayName(ms, now)} ${clock(ms)}`
 
 export function relativeTime(ms: number, now: number): string {
   let minutes = Math.round((now - ms) / MINUTE)
-  if (minutes <= 0) return '現在'
+  if (minutes <= 0) return t('time.now')
   const days = Math.floor(minutes / 1440)
   minutes -= days * 1440
   const hours = Math.floor(minutes / 60)
   minutes -= hours * 60
-  return `${days ? `${days}天` : ''}${hours ? `${hours}小時` : ''}${minutes && !days ? `${minutes}分鐘` : ''}前`
+  const parts = [
+    days ? tn('time.days', days) : '',
+    hours ? tn('time.hours', hours) : '',
+    minutes && !days ? tn('time.minutes', minutes) : '',
+  ].filter(Boolean)
+  return t('time.ago', { span: parts.join(t('time.joiner')) })
 }

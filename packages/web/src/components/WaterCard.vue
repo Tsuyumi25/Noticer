@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CardModel } from 'server/dashboard'
 import { computed } from 'vue'
+import { t } from '../i18n/index.ts'
 import { ACCENT, BACKGROUND, formatHours, hasStatusIcon, WAVE_SECONDS } from '../status.ts'
 import DailyStrip from './DailyStrip.vue'
 import StatusCorner from './StatusCorner.vue'
@@ -15,11 +16,14 @@ const max = computed(() => formatHours(props.card.maxHours))
 const corner = computed(() => {
   const { mode, status } = props.card
   if (mode === 'deadline' && hasStatusIcon(status)) return { icon: status }
-  if (mode === null) return { word: '沒有門檻' }
-  if (status === 'unknown') return { word: '無記錄' }
-  if (mode === 'cooldown') return { word: status === 'good' ? '可以了' : '太近' }
-  return { word: '快到了' }
+  if (mode === null) return { word: t('card.noLimit') }
+  if (status === 'unknown') return { word: t('card.never') }
+  if (mode === 'cooldown') return { word: status === 'good' ? t('card.ready') : t('card.tooSoon') }
+  return { word: t('card.almostDue') }
 })
+
+// A tracked card that has never been recorded has no "since" to show.
+const label = computed(() => (props.card.mode !== null && props.card.nowHours === null ? t('card.never') : t('card.since')))
 </script>
 
 <template>
@@ -35,7 +39,7 @@ const corner = computed(() => {
       <div class="content">
         <span class="emoji">{{ card.emoji }}</span>
         <div class="time">
-          <div class="label">{{ card.summary }}</div>
+          <div class="label">{{ label }}</div>
           <div class="now">{{ now.value }}<small>{{ now.unit }}</small></div>
           <template v-if="card.maxHours != null">
             <div class="rule" />

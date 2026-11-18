@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/vue-query'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api.ts'
+import { locale, LOCALES, setLocale, t, type Locale } from '../i18n/index.ts'
+import { clock, date } from '../time.ts'
 
 const route = useRoute()
 
@@ -18,9 +20,7 @@ const day = computed(() => {
 const prevDay = computed(() => dayKey(new Date(day.value.getFullYear(), day.value.getMonth(), day.value.getDate() - 1)))
 const nextDay = computed(() => dayKey(new Date(day.value.getFullYear(), day.value.getMonth(), day.value.getDate() + 1)))
 
-const label = computed(() =>
-  day.value.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', weekday: 'short' }),
-)
+const label = computed(() => date(day.value.getTime()))
 
 const { data: events, isPending, isError } = useQuery({
   queryKey: computed(() => ['events', dayKey(day.value)]),
@@ -36,19 +36,19 @@ const { data: events, isPending, isError } = useQuery({
 <template>
   <main class="mx-auto flex min-h-dvh max-w-2xl flex-col">
     <header class="sticky top-0 flex items-center justify-between border-b border-zinc-200 bg-white/90 px-2 py-2 backdrop-blur">
-      <RouterLink :to="{ query: { day: prevDay } }" class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-xl text-zinc-500 hover:bg-zinc-100" aria-label="前一天">‹</RouterLink>
+      <RouterLink :to="{ query: { day: prevDay } }" class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-xl text-zinc-500 hover:bg-zinc-100" :aria-label="t('journal.prevDay')">‹</RouterLink>
       <h1 class="text-lg font-semibold tabular-nums">{{ label }}</h1>
-      <RouterLink :to="{ query: { day: nextDay } }" class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-xl text-zinc-500 hover:bg-zinc-100" aria-label="後一天">›</RouterLink>
+      <RouterLink :to="{ query: { day: nextDay } }" class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-xl text-zinc-500 hover:bg-zinc-100" :aria-label="t('journal.nextDay')">›</RouterLink>
     </header>
 
-    <p v-if="isPending" class="p-6 text-center text-zinc-400">載入中…</p>
-    <p v-else-if="isError" class="p-6 text-center text-red-600">讀取失敗</p>
-    <p v-else-if="!events?.length" class="p-6 text-center text-zinc-400">這天沒有紀錄</p>
+    <p v-if="isPending" class="p-6 text-center text-zinc-400">{{ t('common.loading') }}</p>
+    <p v-else-if="isError" class="p-6 text-center text-red-600">{{ t('common.loadFailed') }}</p>
+    <p v-else-if="!events?.length" class="p-6 text-center text-zinc-400">{{ t('journal.empty') }}</p>
 
     <ol v-else class="divide-y divide-zinc-100">
       <li v-for="event in events" :key="event.id" class="flex gap-3 px-4 py-3">
-        <time class="w-12 shrink-0 pt-0.5 text-sm text-zinc-500 tabular-nums" :title="event.timeOffset < 0 ? '補記' : undefined">
-          {{ new Date(event.eventAt * 1000).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }) }}<span v-if="event.timeOffset < 0" class="text-amber-500">*</span>
+        <time class="w-12 shrink-0 pt-0.5 text-sm text-zinc-500 tabular-nums" :title="event.timeOffset < 0 ? t('journal.backdated') : undefined">
+          {{ clock(event.eventAt * 1000) }}<span v-if="event.timeOffset < 0" class="text-amber-500">*</span>
         </time>
         <div class="min-w-0 flex-1 space-y-1">
           <div class="flex flex-wrap gap-1">
@@ -64,5 +64,19 @@ const { data: events, isPending, isError } = useQuery({
         </div>
       </li>
     </ol>
+
+    <footer class="mt-auto flex items-center justify-center gap-1 border-t border-zinc-100 px-4 py-3 text-sm text-zinc-500">
+      <span class="mr-1">{{ t('settings.language') }}</span>
+      <button
+        v-for="(info, code) in LOCALES"
+        :key="code"
+        class="h-11 rounded-lg px-3"
+        :class="locale === code ? 'bg-zinc-100 font-semibold text-zinc-800' : ''"
+        :lang="code"
+        @click="setLocale(code as Locale)"
+      >
+        {{ info.name }}
+      </button>
+    </footer>
   </main>
 </template>

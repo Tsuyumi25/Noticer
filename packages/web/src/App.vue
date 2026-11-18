@@ -1,8 +1,10 @@
 <script setup lang="ts">
-const tabs = [
-  { to: '/', icon: '✅', label: '打卡' },
-  { to: '/journal', icon: '📖', label: '日誌' },
-] as const
+import { t, type MessageKey } from './i18n/index.ts'
+
+const tabs: { to: string; icon: string; label: MessageKey }[] = [
+  { to: '/', icon: '✅', label: 'nav.checkin' },
+  { to: '/journal', icon: '📖', label: 'nav.journal' },
+]
 </script>
 
 <template>
@@ -20,7 +22,7 @@ const tabs = [
       exact-active-class="!text-indigo-600 font-semibold"
     >
       <span class="text-xl leading-none">{{ tab.icon }}</span>
-      {{ tab.label }}
+      {{ t(tab.label) }}
     </RouterLink>
   </nav>
 </template>

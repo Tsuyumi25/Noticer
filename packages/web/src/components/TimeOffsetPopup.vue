@@ -4,7 +4,8 @@ import { RotateCcw } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { api } from '../api.ts'
 import { dashboardQuery } from '../queries.ts'
-import { absoluteTime, clock, DAY, dayName, floorMinute, MINUTE, relativeTime, startOfDay, weekday } from '../time.ts'
+import { t, tn } from '../i18n/index.ts'
+import { absoluteTime, clock, DAY, date, dayName, floorMinute, MINUTE, relativeTime, startOfDay, weekday } from '../time.ts'
 
 /** The picked time in ms, or null for "now". */
 const props = defineProps<{ modelValue: number | null }>()
@@ -51,7 +52,9 @@ const slots = computed(() => {
   const rows: { at: number; day: string | null; hour: boolean; events: { at: number; label: string }[] }[] = []
   let lastDay = ''
   for (let at = Math.floor(now / SLOT) * SLOT; at >= since; at -= SLOT) {
-    const day = `${dayName(at, now)}　${new Date(at).getMonth() + 1}/${new Date(at).getDate()}（${weekday(at)}）`
+    const name = dayName(at, now)
+    const full = date(at)
+    const day = name === full ? full : t('time.dayHeader', { name, date: full })
     rows.push({ at, day: day === lastDay ? null : day, hour: new Date(at).getMinutes() === 0, events: byslot.get(at) ?? [] })
     lastDay = day
   }
@@ -66,12 +69,12 @@ async function revealSelected(block: ScrollLogicalPosition = 'nearest') {
 
 // ---------- input view ----------
 const SEGMENTS = [
-  { len: 4, min: 2000, max: 2100, unit: '年' },
-  { len: 2, min: 1, max: 12, unit: '個月' },
-  { len: 2, min: 1, max: 31, unit: '天' },
-  { len: 2, min: 0, max: 23, unit: '小時' },
-  { len: 2, min: 0, max: 59, unit: '分鐘' },
-]
+  { len: 4, min: 2000, max: 2100, unit: 'year', amount: 'time.years' },
+  { len: 2, min: 1, max: 12, unit: 'month', amount: 'time.months' },
+  { len: 2, min: 1, max: 31, unit: 'day', amount: 'time.days' },
+  { len: 2, min: 0, max: 23, unit: 'hour', amount: 'time.hours' },
+  { len: 2, min: 0, max: 59, unit: 'minute', amount: 'time.minutes' },
+] as const
 const HOUR = 3
 
 const segment = ref(HOUR)
@@ -174,9 +177,9 @@ function done() {
 const hint = computed(() => {
   const e = expr.value
   if (!e) return ''
-  const dir = e.sign < 0 ? '往前' : '往後'
-  const unit = SEGMENTS[segment.value]!.unit
-  return e.digits ? `${dir} ${e.digits} ${unit}，按＝套用` : `${dir}幾${unit}？`
+  const seg = SEGMENTS[segment.value]!
+  if (!e.digits) return t(e.sign < 0 ? 'time.askEarlier' : 'time.askLater', { unit: t(`time.unit.${seg.unit}`) })
+  return t(e.sign < 0 ? 'time.hintEarlier' : 'time.hintLater', { amount: tn(seg.amount, Number(e.digits)) })
 })
 
 onMounted(() => revealSelected('center'))
@@ -186,10 +189,10 @@ onMounted(() => revealSelected('center'))
   <Teleport to="body">
     <div class="popup">
       <header class="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
-        <h2 class="text-[17px] font-semibold">補記時間</h2>
+        <h2 class="text-[17px] font-semibold">{{ t('time.title') }}</h2>
         <div class="switch">
-          <button :class="{ on: view === 'events' }" @click="switchView('events')">事件</button>
-          <button :class="{ on: view === 'input' }" @click="switchView('input')">輸入</button>
+          <button :class="{ on: view === 'events' }" @click="switchView('events')">{{ t('time.events') }}</button>
+          <button :class="{ on: view === 'input' }" @click="switchView('input')">{{ t('time.input') }}</button>
         </div>
       </header>
 
@@ -197,22 +200,22 @@ onMounted(() => revealSelected('center'))
         <button
           class="flex h-11 flex-col items-center justify-center text-xs text-zinc-500 disabled:opacity-30"
           :disabled="preview === now && !expr"
-          aria-label="改回現在"
+          :aria-label="t('time.backToNow')"
           @click="setDraft(now)"
         >
-          <RotateCcw :size="16" />現在
+          <RotateCcw :size="16" />{{ t('time.now') }}
         </button>
         <div class="text-center">
           <div class="text-[28px] leading-tight font-bold">{{ relativeTime(preview, now) }}</div>
           <div class="text-[15px] text-zinc-500">{{ absoluteTime(preview, now) }}</div>
           <div v-if="hint" class="text-[13px] text-indigo-700">{{ hint }}</div>
-          <div v-if="preview > now" class="text-[13px] text-red-600">這是未來的時間，完成時會改成現在</div>
+          <div v-if="preview > now" class="text-[13px] text-red-600">{{ t('time.future') }}</div>
         </div>
       </div>
 
       <div class="grid shrink-0 grid-cols-4 gap-2 px-4 pb-3">
         <button v-for="m in [-5, -1, 1, 5]" :key="m" class="fine" @click="setDraft(draft + m * MINUTE)">
-          {{ m < 0 ? '−' : '+' }}{{ Math.abs(m) }} 分
+          {{ m < 0 ? '−' : '+' }}{{ t('time.fine', { n: Math.abs(m) }) }}
         </button>
       </div>
 
@@ -237,7 +240,7 @@ onMounted(() => revealSelected('center'))
               {{ segmentText(i, value) }}
             </button>
             <span v-if="i < 2" class="px-px text-xl text-zinc-400">/</span>
-            <span v-else-if="i === 2" class="pr-2 text-xs text-zinc-400">（{{ weekday(draft) }}）</span>
+            <span v-else-if="i === 2" class="px-1.5 text-xs text-zinc-400">{{ weekday(draft) }}</span>
             <span v-else-if="i === 3" class="px-px text-xl text-zinc-400">:</span>
           </template>
         </div>
@@ -248,15 +251,15 @@ onMounted(() => revealSelected('center'))
           <button class="op" @click="sign(1)">＋</button>
           <button v-for="n in [7, 8, 9]" :key="n" @click="digit(String(n))">{{ n }}</button>
           <button class="eq" @click="commit()">＝</button>
-          <button class="op" aria-label="上一個單位" @click="focus(segment - 1)">←</button>
+          <button class="op" :aria-label="t('time.prevUnit')" @click="focus(segment - 1)">←</button>
           <button @click="digit('0')">0</button>
-          <button class="op" aria-label="下一個單位" @click="focus(segment + 1)">→</button>
+          <button class="op" :aria-label="t('time.nextUnit')" @click="focus(segment + 1)">→</button>
         </div>
       </div>
 
       <footer class="grid shrink-0 grid-cols-2 gap-3 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-        <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="emit('close')">取消</button>
-        <button class="h-12 rounded-xl bg-indigo-600 font-semibold text-white" @click="done">完成</button>
+        <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="emit('close')">{{ t('common.cancel') }}</button>
+        <button class="h-12 rounded-xl bg-indigo-600 font-semibold text-white" @click="done">{{ t('common.done') }}</button>
       </footer>
     </div>
   </Teleport>

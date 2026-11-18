@@ -4,13 +4,15 @@ import type { CardTags } from 'server/tags'
 import Sortable from 'sortablejs'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { api } from '../api.ts'
+import { t } from '../i18n/index.ts'
 
 const props = defineProps<{ cardId: string; editing: boolean; modelValue: string[] | null }>()
 const emit = defineEmits<{ 'update:modelValue': [tags: string[]] }>()
 
 type TagGroup = CardTags['groups'][number]
 
-const UNGROUPED = '未分組'
+/** Container id of the tags outside any group; never a real group name. */
+const UNGROUPED = '__ungrouped__'
 const PALETTE = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#ef4444', '#14b8a6', '#84cc16']
 
 const queryClient = useQueryClient()
@@ -69,7 +71,7 @@ async function saveGroups() {
   const root = data.value?.root
   if (!root) return
   const res = await api['tag-groups'][':root'].$put({ param: { root }, json: { groups: groups.value } })
-  if (!res.ok) error.value = `儲存分組失敗（${res.status}）`
+  if (!res.ok) error.value = t('tags.saveGroupsFailed', { status: res.status })
   await queryClient.invalidateQueries({ queryKey: ['cardTags'] })
 }
 
@@ -79,7 +81,7 @@ async function saveSettings() {
     param: { cardId: props.cardId },
     json: { hiddenTags: hidden.value, defaultTags: defaults.value },
   })
-  if (!res.ok) error.value = `儲存設定失敗（${res.status}）`
+  if (!res.ok) error.value = t('tags.saveSettingsFailed', { status: res.status })
   await queryClient.invalidateQueries({ queryKey: ['cardTags', props.cardId] })
 }
 
@@ -175,15 +177,15 @@ function confirmPrompt() {
 }
 
 function addGroup() {
-  openPrompt('新增分組', '', (name) => {
-    if (name === UNGROUPED || groups.value.some((g) => g.name === name)) return '已經有這個分組'
+  openPrompt(t('tags.newGroup'), '', (name) => {
+    if (groups.value.some((g) => g.name === name)) return t('tags.groupExists')
     groups.value.push({ name, color: PALETTE[groups.value.length % PALETTE.length]!, tags: [] })
     saveGroups()
   })
 }
 
 function addCustom(container: string) {
-  openPrompt(container === UNGROUPED ? '新增 tag（只用在這一筆）' : `在「${container}」新增 tag`, '', (label) => {
+  openPrompt(container === UNGROUPED ? t('tags.newTagOnce') : t('tags.newTagIn', { group: container }), '', (label) => {
     const exists = grouped.value.has(label) || history.value.includes(label) || extra.value.includes(label)
     if (!exists) {
       if (container === UNGROUPED) extra.value.push(label)
@@ -199,7 +201,7 @@ function addCustom(container: string) {
 function changeEmoji(label: string) {
   const tag = groups.value.flatMap((g) => g.tags).find((t) => t.label === label)
   if (!tag) return
-  openPrompt(`「${label}」的 emoji`, tag.emoji, (emoji) => {
+  openPrompt(t('tags.emojiFor', { tag: label }), tag.emoji, (emoji) => {
     tag.emoji = emoji
     saveGroups()
   })
@@ -283,8 +285,8 @@ onBeforeUnmount(() => {
         <div class="ghead">
           <h4 class="gtitle" :style="{ borderLeftColor: g.color }">{{ g.name }}</h4>
           <template v-if="editing">
-            <button class="gbtn" :disabled="gi === 0" aria-label="往上移" @click="moveGroup(gi, -1)">↑</button>
-            <button class="gbtn" :disabled="gi === visibleGroups.length - 1" aria-label="往下移" @click="moveGroup(gi, 1)">↓</button>
+            <button class="gbtn" :disabled="gi === 0" :aria-label="t('tags.moveUp')" @click="moveGroup(gi, -1)">↑</button>
+            <button class="gbtn" :disabled="gi === visibleGroups.length - 1" :aria-label="t('tags.moveDown')" @click="moveGroup(gi, 1)">↓</button>
           </template>
         </div>
         <div class="chips" :data-container="g.name">
@@ -298,12 +300,12 @@ onBeforeUnmount(() => {
           >
             <span v-if="t.emoji" class="emoji">{{ t.emoji }}</span>{{ t.label }}
           </button>
-          <button class="chip add" @click="addCustom(g.name)">+ 自訂</button>
+          <button class="chip add" @click="addCustom(g.name)">{{ t('tags.custom') }}</button>
         </div>
       </section>
     </TransitionGroup>
     <section class="group">
-      <div class="ghead"><h4 class="gtitle" style="border-left-color: #9ca3af">未分組</h4></div>
+      <div class="ghead"><h4 class="gtitle" style="border-left-color: #9ca3af">{{ t('tags.ungrouped') }}</h4></div>
       <div class="chips" :data-container="UNGROUPED">
         <button
           v-for="label in ungrouped"
@@ -315,31 +317,31 @@ onBeforeUnmount(() => {
         >
           {{ label }}
         </button>
-        <button v-if="!editing" class="chip add" @click="addCustom(UNGROUPED)">+ 自訂</button>
+        <button v-if="!editing" class="chip add" @click="addCustom(UNGROUPED)">{{ t('tags.custom') }}</button>
       </div>
     </section>
 
     <Teleport to="body">
       <div v-if="menu" class="layer" @click.self="menu = null">
         <div class="bs">
-          <p class="bs-title">「{{ menu.label }}」</p>
-          <button class="item" @click="toggleDefault(menu.label); menu = null">{{ defaults.includes(menu.label) ? '取消預設' : '設為預設' }}</button>
-          <button v-if="menu.container !== UNGROUPED" class="item" @click="changeEmoji(menu.label); menu = null">更換 Emoji</button>
-          <button class="item" @click="moveTarget = menu.label; menu = null">移到…</button>
-          <button class="item" @click="toggleHidden(menu.label); menu = null">{{ isHidden(menu.label) ? '取消隱藏' : '隱藏' }}</button>
-          <button class="close" @click="menu = null">取消</button>
+          <p class="bs-title">{{ t('common.quoted', { text: menu.label }) }}</p>
+          <button class="item" @click="toggleDefault(menu.label); menu = null">{{ defaults.includes(menu.label) ? t('tags.unsetDefault') : t('tags.setDefault') }}</button>
+          <button v-if="menu.container !== UNGROUPED" class="item" @click="changeEmoji(menu.label); menu = null">{{ t('tags.changeEmoji') }}</button>
+          <button class="item" @click="moveTarget = menu.label; menu = null">{{ t('tags.moveTo') }}</button>
+          <button class="item" @click="toggleHidden(menu.label); menu = null">{{ isHidden(menu.label) ? t('tags.unhide') : t('tags.hide') }}</button>
+          <button class="close" @click="menu = null">{{ t('common.cancel') }}</button>
         </div>
       </div>
       <div v-if="moveTarget" class="layer" @click.self="moveTarget = null">
         <div class="bs">
-          <p class="bs-title">把「{{ moveTarget }}」移到…</p>
+          <p class="bs-title">{{ t('tags.moveTitle', { tag: moveTarget }) }}</p>
           <button v-for="g in groups" :key="g.name" class="item" @click="moveTo(g.name)">
             <span class="gtitle" :style="{ borderLeftColor: g.color }">{{ g.name }}</span>
           </button>
           <button class="item" @click="moveTo(UNGROUPED)">
-            <span class="gtitle" style="border-left-color: #9ca3af">未分組</span>
+            <span class="gtitle" style="border-left-color: #9ca3af">{{ t('tags.ungrouped') }}</span>
           </button>
-          <button class="close" @click="moveTarget = null">取消</button>
+          <button class="close" @click="moveTarget = null">{{ t('common.cancel') }}</button>
         </div>
       </div>
       <div v-if="prompt" class="layer" @click.self="prompt = null">
@@ -347,8 +349,8 @@ onBeforeUnmount(() => {
           <p class="bs-title">{{ prompt.title }}</p>
           <input v-model="prompt.value" v-focus class="input" />
           <p v-if="promptError" class="mt-1 text-sm text-red-600">{{ promptError }}</p>
-          <button type="submit" class="close primary">確定</button>
-          <button type="button" class="close" @click="prompt = null">取消</button>
+          <button type="submit" class="close primary">{{ t('common.ok') }}</button>
+          <button type="button" class="close" @click="prompt = null">{{ t('common.cancel') }}</button>
         </form>
       </div>
     </Teleport>

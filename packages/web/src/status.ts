@@ -1,4 +1,5 @@
 import type { CardModel } from 'server/dashboard'
+import { t } from './i18n/index.ts'
 
 export type CardStatus = CardModel['status']
 
@@ -22,10 +23,10 @@ export const WAVE_SECONDS: Record<CardStatus, number> = { danger: 2, warning: 2.
 
 export const hasStatusIcon = (status: CardStatus) => status === 'good' || status === 'warning' || status === 'danger'
 
-/** ≤ 48 hours in 時, otherwise 天; one decimal, no trailing .0. */
+/** ≤ 48 hours in hours, otherwise days; one decimal, no trailing .0. */
 export function formatHours(hours: number | null): { value: string; unit: string } {
   if (hours == null || !Number.isFinite(hours)) return { value: '--', unit: '' }
-  const [n, unit] = hours <= 48 ? [Math.max(0, hours), '時'] : [hours / 24, '天']
+  const [n, unit] = hours <= 48 ? [Math.max(0, hours), t('unit.hour')] : [hours / 24, t('unit.day')]
   const rounded = Math.round(n * 10) / 10
   return { value: Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1), unit }
 }

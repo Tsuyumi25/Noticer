@@ -13,7 +13,6 @@ export interface CardModel {
   progress: number
   nowHours: number | null
   maxHours: number | null
-  summary: string
   strip: DailyStrip | null
   needsValue: boolean
 }
@@ -61,7 +60,6 @@ export function buildDashboard(config: Config, events: EventRecord[], now: numbe
         progress: result?.progress ?? 0,
         nowHours: result?.lastAt != null ? (now - result.lastAt) / 3600 : null,
         maxHours: result?.maxHours ?? null,
-        summary: result && result.lastAt === null ? '無記錄' : '距今',
         strip: strip ? evaluateStrip(strip, events, now) : null,
       }
     })
