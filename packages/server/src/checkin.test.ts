@@ -35,6 +35,17 @@ describe('checkin', () => {
     expect(allEvents(db)[0]).toMatchObject({ cardId: 'sunscreen', tags: ['防曬', '護膚', '乳液'], note: '早上', timeOffset: 0 })
   })
 
+  it('backdates event_at by the offset and refuses times in the future', async () => {
+    const { db, send } = setup()
+    const before = Math.floor(Date.now() / 1000)
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], timeOffset: -3 * 3600 })
+    const [event] = allEvents(db)
+    expect(event?.timeOffset).toBe(-3 * 3600)
+    expect(event!.eventAt - (before - 3 * 3600)).toBeLessThanOrEqual(1)
+    expect((await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], timeOffset: 60 })).status).toBe(400)
+    expect(allEvents(db)).toHaveLength(1)
+  })
+
   it('reuses an existing tag instead of creating a duplicate', async () => {
     const { db, send } = setup()
     await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [] })

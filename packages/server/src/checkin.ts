@@ -13,14 +13,21 @@ export function checkinTags(card: CardConfig, picked: string[]): string[] {
   return [...new Set([card.tag, ...(card.bucket ? [card.bucket] : []), ...chosen])]
 }
 
-export function createCheckin(db: DB, card: CardConfig, note: string | null, picked: string[], now: number): number {
-  const insertEvent = db.prepare('INSERT INTO events (card_id, created_at, note) VALUES (?, ?, ?)')
+interface CheckinInput {
+  note: string | null
+  picked: string[]
+  now: number
+  timeOffset: number
+}
+
+export function createCheckin(db: DB, card: CardConfig, { note, picked, now, timeOffset }: CheckinInput): number {
+  const insertEvent = db.prepare('INSERT INTO events (card_id, created_at, time_offset, note) VALUES (?, ?, ?, ?)')
   const findTag = db.prepare<[string], { id: number }>('SELECT id FROM tags_dict WHERE name = ? ORDER BY id LIMIT 1')
   const insertTag = db.prepare('INSERT INTO tags_dict (name) VALUES (?)')
   const linkTag = db.prepare('INSERT INTO checkin_tags (checkin_id, tag_id) VALUES (?, ?)')
 
   return db.transaction(() => {
-    const id = Number(insertEvent.run(card.id, now, note).lastInsertRowid)
+    const id = Number(insertEvent.run(card.id, now, timeOffset, note).lastInsertRowid)
     for (const name of checkinTags(card, picked)) {
       const tagId = findTag.get(name)?.id ?? Number(insertTag.run(name).lastInsertRowid)
       linkTag.run(id, tagId)

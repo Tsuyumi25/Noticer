@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
-import { Pencil } from 'lucide-vue-next'
+import { ChevronRight, Clock, Pencil } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '../api.ts'
+import { absoluteTime, relativeTime } from '../time.ts'
 import TagPicker from './TagPicker.vue'
+import TimeOffsetPopup from './TimeOffsetPopup.vue'
 
 export interface SheetCard {
   id: string
@@ -23,8 +25,20 @@ function onTags(next: string[]) {
   if (tags.value === null) initialTags = [...next].sort().join('\n')
   tags.value = next
 }
+/** When it happened, in ms; null means now. */
+const happenedAt = ref<number | null>(null)
+const timePopup = ref(false)
+const timeLabel = computed(() => {
+  if (happenedAt.value === null) return '現在'
+  const now = Date.now()
+  return `${relativeTime(happenedAt.value, now)} · ${absoluteTime(happenedAt.value, now)}`
+})
+
 const dirty = computed(
-  () => note.value.trim() !== '' || (tags.value !== null && [...tags.value].sort().join('\n') !== initialTags),
+  () =>
+    note.value.trim() !== '' ||
+    happenedAt.value !== null ||
+    (tags.value !== null && [...tags.value].sort().join('\n') !== initialTags),
 )
 
 const editing = ref(false)
@@ -33,7 +47,8 @@ const picker = ref<InstanceType<typeof TagPicker> | null>(null)
 const queryClient = useQueryClient()
 const submit = useMutation({
   mutationFn: async () => {
-    const res = await api.checkin.$post({ json: { cardId: props.card.id, note: note.value, tags: tags.value ?? [] } })
+    const timeOffset = happenedAt.value === null ? 0 : Math.min(0, Math.round((happenedAt.value - Date.now()) / 1000))
+    const res = await api.checkin.$post({ json: { cardId: props.card.id, note: note.value, tags: tags.value ?? [], timeOffset } })
     if (!res.ok) throw new Error(`送出失敗（${res.status}）`)
   },
   onSuccess: () => {
@@ -129,7 +144,8 @@ function onTouchEnd(e: TouchEvent) {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
-  if (confirming.value) confirming.value = false
+  if (timePopup.value) timePopup.value = false
+  else if (confirming.value) confirming.value = false
   else requestClose()
 }
 
@@ -172,6 +188,15 @@ onUnmounted(() => {
           </button>
         </div>
         <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+          <button
+            class="mb-1 flex min-h-12 w-full items-center justify-between rounded-xl border border-zinc-200 px-3"
+            @click="timePopup = true"
+          >
+            <span class="flex items-center gap-2"><Clock :size="18" class="text-zinc-400" />時間</span>
+            <span class="flex items-center gap-1" :class="happenedAt === null ? 'text-zinc-500' : 'font-semibold text-amber-700'">
+              {{ timeLabel }}<ChevronRight :size="18" class="text-zinc-400" />
+            </span>
+          </button>
           <TagPicker ref="picker" :card-id="card.id" :editing="editing" :model-value="tags" @update:model-value="onTags" />
           <textarea
             v-model="note"
@@ -202,6 +227,7 @@ onUnmounted(() => {
         </footer>
       </section>
 
+      <TimeOffsetPopup v-if="timePopup" v-model="happenedAt" @close="timePopup = false" />
       <div v-if="confirming" class="absolute inset-0 flex items-end bg-black/40" @click.self="confirming = false">
         <div
           role="alertdialog"

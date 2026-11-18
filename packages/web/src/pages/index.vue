@@ -1,22 +1,14 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
 import { ref } from 'vue'
-import { api } from '../api.ts'
 import CheckinSheet, { type SheetCard } from '../components/CheckinSheet.vue'
 import SleepCard from '../components/SleepCard.vue'
 import WaterCard from '../components/WaterCard.vue'
+import { dashboardQuery } from '../queries.ts'
 
 const opened = ref<SheetCard | null>(null)
 
-const { data, isPending, isError } = useQuery({
-  queryKey: ['dashboard'],
-  queryFn: async () => {
-    const res = await api.dashboard.$get({ query: {} })
-    if (!res.ok) throw new Error(`dashboard: ${res.status}`)
-    return res.json()
-  },
-  refetchInterval: 60_000,
-})
+const { data, isPending, isError } = useQuery({ ...dashboardQuery, refetchInterval: 60_000 })
 </script>
 
 <template>

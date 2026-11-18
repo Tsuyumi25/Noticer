@@ -19,7 +19,13 @@ const rangeQuery = z
 
 const dashboardQuery = z.object({ at: z.coerce.number().int().optional() })
 
-const checkinBody = z.object({ cardId: z.string(), note: z.string(), tags: z.array(z.string()) })
+// A backdated checkin keeps created_at at submit time and moves event_at by a non-positive offset.
+const checkinBody = z.object({
+  cardId: z.string(),
+  note: z.string(),
+  tags: z.array(z.string()),
+  timeOffset: z.number().int().max(0).optional(),
+})
 
 const tagGroupsBody = z.object({ groups: tagGroupsSchema })
 
@@ -36,12 +42,13 @@ const api = new Hono<Env>()
     return c.json(buildDashboard(c.var.store.read(), listEvents(c.var.db, 0, now + 1), now))
   })
   .post('/checkin', zValidator('json', checkinBody), (c) => {
-    const { cardId, note, tags } = c.req.valid('json')
+    const { cardId, note, tags, timeOffset = 0 } = c.req.valid('json')
     const card = c.var.store.read().cards.find((k) => k.id === cardId)
     if (!card) return c.json({ error: `unknown card ${cardId}` }, 404)
     if (needsValue(card)) return c.json({ error: `card ${cardId} needs a value input` }, 422)
     const trimmed = note.trim()
-    const id = createCheckin(c.var.db, card, trimmed === '' ? null : trimmed, tags, Math.floor(Date.now() / 1000))
+    const now = Math.floor(Date.now() / 1000)
+    const id = createCheckin(c.var.db, card, { note: trimmed === '' ? null : trimmed, picked: tags, now, timeOffset })
     return c.json({ id }, 201)
   })
   .get('/cards/:cardId/tags', (c) => {
