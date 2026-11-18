@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { BookOpen, House, Settings } from 'lucide-vue-next'
+import type { Component } from 'vue'
 import { t, type MessageKey } from './i18n/index.ts'
 
-const tabs: { to: string; icon: string; label: MessageKey }[] = [
-  { to: '/', icon: '✅', label: 'nav.checkin' },
-  { to: '/journal', icon: '📖', label: 'nav.journal' },
+const tabs: { to: string; icon: Component; label: MessageKey }[] = [
+  { to: '/', icon: House, label: 'nav.home' },
+  { to: '/journal', icon: BookOpen, label: 'nav.journal' },
+  { to: '/settings', icon: Settings, label: 'nav.settings' },
 ]
 </script>
 
@@ -18,10 +21,10 @@ const tabs: { to: string; icon: string; label: MessageKey }[] = [
       v-for="tab in tabs"
       :key="tab.to"
       :to="tab.to"
-      class="flex h-16 flex-1 flex-col items-center justify-center gap-0.5 text-xs text-zinc-500"
+      class="flex h-16 flex-1 flex-col items-center justify-center gap-1 text-xs text-zinc-500"
       exact-active-class="!text-indigo-600 font-semibold"
     >
-      <span class="text-xl leading-none">{{ tab.icon }}</span>
+      <component :is="tab.icon" :size="22" />
       {{ t(tab.label) }}
     </RouterLink>
   </nav>

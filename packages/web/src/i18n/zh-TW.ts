@@ -1,7 +1,8 @@
 // The source locale: every other locale must provide exactly these keys.
 export default {
-  'nav.checkin': '打卡',
+  'nav.home': '首頁',
   'nav.journal': '日誌',
+  'nav.settings': '設定',
 
   'common.loading': '載入中…',
   'common.loadFailed': '讀取失敗',

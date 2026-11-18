@@ -1,8 +1,9 @@
 import type { Messages } from './index.ts'
 
 export default {
-  'nav.checkin': 'Check in',
+  'nav.home': 'Home',
   'nav.journal': 'Journal',
+  'nav.settings': 'Settings',
 
   'common.loading': 'Loading…',
   'common.loadFailed': "Couldn't load",

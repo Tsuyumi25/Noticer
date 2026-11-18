@@ -1,8 +1,9 @@
 import type { Messages } from './index.ts'
 
 export default {
-  'nav.checkin': '記録',
+  'nav.home': 'ホーム',
   'nav.journal': '日誌',
+  'nav.settings': '設定',
 
   'common.loading': '読み込み中…',
   'common.loadFailed': '読み込めませんでした',

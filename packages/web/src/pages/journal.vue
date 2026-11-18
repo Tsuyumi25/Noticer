@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/vue-query'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api.ts'
-import { locale, LOCALES, setLocale, t, type Locale } from '../i18n/index.ts'
+import { t } from '../i18n/index.ts'
 import { clock, date } from '../time.ts'
 
 const route = useRoute()
@@ -64,19 +64,5 @@ const { data: events, isPending, isError } = useQuery({
         </div>
       </li>
     </ol>
-
-    <footer class="mt-auto flex items-center justify-center gap-1 border-t border-zinc-100 px-4 py-3 text-sm text-zinc-500">
-      <span class="mr-1">{{ t('settings.language') }}</span>
-      <button
-        v-for="(info, code) in LOCALES"
-        :key="code"
-        class="h-11 rounded-lg px-3"
-        :class="locale === code ? 'bg-zinc-100 font-semibold text-zinc-800' : ''"
-        :lang="code"
-        @click="setLocale(code as Locale)"
-      >
-        {{ info.name }}
-      </button>
-    </footer>
   </main>
 </template>
