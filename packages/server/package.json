@@ -6,6 +6,7 @@
     "./app": "./src/app.ts",
     "./dashboard": "./src/dashboard.ts",
     "./facts": "./src/facts.ts",
+    "./review": "./src/review.ts",
     "./tags": "./src/tags.ts"
   },
   "scripts": {

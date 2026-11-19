@@ -1,1 +1,11 @@
 @import 'tailwindcss';
+
+[data-long-press] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: transform 0.15s ease-out;
+}
+[data-long-press].pressing {
+  transform: scale(0.97);
+}

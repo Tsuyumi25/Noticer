@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ChevronRight, Clock, Pencil } from 'lucide-vue-next'
+import { CalendarDays, ChevronRight, Clock, Pencil } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
 import { absoluteTime, relativeTime } from '../time.ts'
@@ -121,8 +122,24 @@ function discard() {
   leave()
 }
 
+/** Where to go once the sheet has slid away; null just closes it. */
+let leaveTo: string | null = null
+const router = useRouter()
+
+function keepEditing() {
+  confirming.value = false
+  leaveTo = null
+}
+
+function openReport() {
+  leaveTo = `/cards/${props.card.id}`
+  requestClose()
+}
+
 function onTransitionEnd(e: TransitionEvent) {
-  if (leaving.value && e.target === sheet.value && e.propertyName === 'transform') emit('close')
+  if (!leaving.value || e.target !== sheet.value || e.propertyName !== 'transform') return
+  if (leaveTo) router.push(leaveTo)
+  emit('close')
 }
 
 const DAMPING = 0.6
@@ -176,7 +193,7 @@ function onTouchEnd(e: TouchEvent) {
 function onKeydown(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
   if (timePopup.value) timePopup.value = false
-  else if (confirming.value) confirming.value = false
+  else if (confirming.value) keepEditing()
   else requestClose()
 }
 
@@ -214,9 +231,14 @@ onUnmounted(() => {
             {{ card.emoji }} {{ card.name }}<span v-if="editing" class="text-sm font-medium text-amber-700">{{ t('sheet.editing') }}</span>
           </h2>
           <button v-if="editing" class="h-11 min-w-11 px-2 font-semibold text-indigo-600" @click="editing = false">{{ t('common.done') }}</button>
-          <button v-else class="flex h-11 min-w-11 items-center gap-1 px-2 text-zinc-400" @click="editing = true">
-            <Pencil :size="16" />{{ t('sheet.edit') }}
-          </button>
+          <div v-else class="flex items-center">
+            <button class="flex h-11 min-w-11 items-center gap-1 px-2 text-zinc-400" @click="openReport">
+              <CalendarDays :size="16" />{{ t('review.open') }}
+            </button>
+            <button class="flex h-11 min-w-11 items-center gap-1 px-2 text-zinc-400" @click="editing = true">
+              <Pencil :size="16" />{{ t('sheet.edit') }}
+            </button>
+          </div>
         </div>
         <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
           <button
@@ -286,7 +308,7 @@ onUnmounted(() => {
       </section>
 
       <TimeOffsetPopup v-if="timePopup" v-model="happenedAt" @close="timePopup = false" />
-      <div v-if="confirming" class="absolute inset-0 flex items-end bg-black/40" @click.self="confirming = false">
+      <div v-if="confirming" class="absolute inset-0 flex items-end bg-black/40" @click.self="keepEditing">
         <div
           role="alertdialog"
           :aria-label="t('sheet.discardLabel')"
@@ -295,7 +317,7 @@ onUnmounted(() => {
           <p class="mb-1 text-center font-semibold">{{ t('sheet.discardTitle') }}</p>
           <p class="mb-4 text-center text-sm text-zinc-500">{{ t('sheet.discardBody') }}</p>
           <button class="mb-2 h-12 w-full rounded-xl bg-red-500 font-semibold text-white" @click="discard">{{ t('sheet.discard') }}</button>
-          <button class="h-12 w-full rounded-xl bg-zinc-100 font-semibold" @click="confirming = false">{{ t('sheet.keepEditing') }}</button>
+          <button class="h-12 w-full rounded-xl bg-zinc-100 font-semibold" @click="keepEditing">{{ t('sheet.keepEditing') }}</button>
         </div>
       </div>
     </div>

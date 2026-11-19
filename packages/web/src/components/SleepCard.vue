@@ -2,13 +2,14 @@
 import type { SleepCard } from 'server/dashboard'
 import { computed } from 'vue'
 import { t } from '../i18n/index.ts'
+import { vLongPress } from '../longPress.ts'
 import { ACCENT, BACKGROUND, formatHours, hasStatusIcon, WAVE_SECONDS } from '../status.ts'
 import { clock } from '../time.ts'
 import StatusCorner from './StatusCorner.vue'
 import type { SheetCard } from './CheckinSheet.vue'
 import WaterSurface from './WaterSurface.vue'
 const props = defineProps<{ sleep: SleepCard }>()
-defineEmits<{ open: [card: SheetCard] }>()
+defineEmits<{ open: [card: SheetCard]; review: [cardId: string] }>()
 
 const halves = computed(() => {
   const s = props.sleep
@@ -51,6 +52,7 @@ const corner = computed(() => {
         :key="i"
         class="half cursor-pointer"
         :class="{ lit: h.lit, other: sleep.state !== 'unknown' && !h.lit }"
+        v-long-press="() => $emit('review', h.id)"
         @click="$emit('open', { id: h.id, name: h.name, emoji: h.emoji })"
       >
         <template v-if="h.lit">

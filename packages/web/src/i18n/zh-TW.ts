@@ -9,6 +9,7 @@ export default {
   'common.cancel': '取消',
   'common.done': '完成',
   'common.ok': '確定',
+  'common.close': '關閉',
   'common.quoted': '「{text}」',
 
   'dashboard.sleep': '😴 作息',
@@ -119,6 +120,10 @@ export default {
   'journal.nextDay': '後一天',
   'journal.empty': '這天沒有紀錄',
   'journal.backdated': '補記',
+
+  'review.open': '報告',
+  'review.back': '返回',
+  'review.dayEmpty': '這天沒有紀錄',
 
   'settings.language': '語言',
 } as const

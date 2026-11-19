@@ -7,7 +7,9 @@ import { buildDashboard } from './dashboard.ts'
 import type { DB } from './db.ts'
 import { listEvents } from './events.ts'
 import { cardInputs, readFacts } from './facts.ts'
+import { cardCalendar, cardSource } from './review.ts'
 import { cardRoot, cardTags } from './tags.ts'
+import { matchesSource } from './trackers.ts'
 
 type Env = { Variables: { db: DB; store: ConfigStore } }
 
@@ -66,6 +68,21 @@ const api = new Hono<Env>()
     const card = config.cards.find((k) => k.id === c.req.param('cardId'))
     if (!card) return c.json({ error: 'unknown card' }, 404)
     return c.json(cardInputs(c.var.db, config, card))
+  })
+  .get('/cards/:cardId/calendar', (c) => {
+    const config = c.var.store.read()
+    const card = config.cards.find((k) => k.id === c.req.param('cardId'))
+    if (!card) return c.json({ error: 'unknown card' }, 404)
+    const now = Math.floor(Date.now() / 1000)
+    return c.json(cardCalendar(config, card, listEvents(c.var.db, 0, now + 1), now))
+  })
+  .get('/cards/:cardId/events', zValidator('query', rangeQuery), (c) => {
+    const config = c.var.store.read()
+    const card = config.cards.find((k) => k.id === c.req.param('cardId'))
+    if (!card) return c.json({ error: 'unknown card' }, 404)
+    const { from, to } = c.req.valid('query')
+    const source = cardSource(config, card)
+    return c.json(listEvents(c.var.db, from, to).filter((e) => matchesSource(e, source)))
   })
   .put('/cards/:cardId/tag-settings', zValidator('json', tagSettingsBody), (c) => {
     const cardId = c.req.param('cardId')

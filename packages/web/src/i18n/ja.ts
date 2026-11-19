@@ -10,6 +10,7 @@ export default {
   'common.cancel': 'キャンセル',
   'common.done': '完了',
   'common.ok': 'OK',
+  'common.close': '閉じる',
   'common.quoted': '「{text}」',
 
   'dashboard.sleep': '😴 睡眠',
@@ -120,6 +121,10 @@ export default {
   'journal.nextDay': '次の日',
   'journal.empty': 'この日の記録はありません',
   'journal.backdated': '後から記録',
+
+  'review.open': 'レポート',
+  'review.back': '戻る',
+  'review.dayEmpty': 'この日の記録はありません',
 
   'settings.language': '言語',
 } satisfies Messages

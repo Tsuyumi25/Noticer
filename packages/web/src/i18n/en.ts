@@ -10,6 +10,7 @@ export default {
   'common.cancel': 'Cancel',
   'common.done': 'Done',
   'common.ok': 'OK',
+  'common.close': 'Close',
   'common.quoted': '“{text}”',
 
   'dashboard.sleep': '😴 Sleep',
@@ -120,6 +121,10 @@ export default {
   'journal.nextDay': 'Next day',
   'journal.empty': 'Nothing recorded this day',
   'journal.backdated': 'Backdated',
+
+  'review.open': 'Report',
+  'review.back': 'Back',
+  'review.dayEmpty': 'Nothing recorded this day',
 
   'settings.language': 'Language',
 } satisfies Messages
