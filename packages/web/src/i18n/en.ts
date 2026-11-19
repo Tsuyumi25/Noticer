@@ -122,8 +122,6 @@ export default {
   'journal.empty': 'Nothing recorded this day',
   'journal.backdated': 'Backdated',
 
-  'review.open': 'Report',
-  'review.back': 'Back',
   'review.dayEmpty': 'Nothing recorded this day',
 
   'settings.language': 'Language',

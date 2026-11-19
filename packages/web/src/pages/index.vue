@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import CheckinSheet, { type SheetCard } from '../components/CheckinSheet.vue'
+import ReviewSheet from '../components/ReviewSheet.vue'
 import SleepCard from '../components/SleepCard.vue'
 import WaterCard from '../components/WaterCard.vue'
 import { t } from '../i18n/index.ts'
@@ -13,8 +14,14 @@ const opened = ref<SheetCard | null>(null)
 
 const { data, isPending, isError } = useQuery({ ...dashboardQuery, refetchInterval: 60_000 })
 
+const route = useRoute()
 const router = useRouter()
-const openReview = (cardId: string) => router.push(`/cards/${cardId}`)
+const reviewing = computed(() => (typeof route.query.review === 'string' ? route.query.review : null))
+const openReview = (cardId: string) => router.push({ query: { review: cardId } })
+function closeReview() {
+  if (window.history.state?.back) router.back()
+  else router.replace({ query: {} })
+}
 </script>
 
 <template>
@@ -56,6 +63,7 @@ const openReview = (cardId: string) => router.push(`/cards/${cardId}`)
     </template>
   </main>
   <CheckinSheet v-if="opened" :key="opened.name" :card="opened" @close="opened = null" />
+  <ReviewSheet v-if="reviewing" :key="reviewing" :card-id="reviewing" @close="closeReview" />
   </div>
 </template>
 

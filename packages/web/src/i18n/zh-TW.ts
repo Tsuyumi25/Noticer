@@ -121,8 +121,6 @@ export default {
   'journal.empty': '這天沒有紀錄',
   'journal.backdated': '補記',
 
-  'review.open': '報告',
-  'review.back': '返回',
   'review.dayEmpty': '這天沒有紀錄',
 
   'settings.language': '語言',

@@ -122,8 +122,6 @@ export default {
   'journal.empty': 'この日の記録はありません',
   'journal.backdated': '後から記録',
 
-  'review.open': 'レポート',
-  'review.back': '戻る',
   'review.dayEmpty': 'この日の記録はありません',
 
   'settings.language': '言語',
