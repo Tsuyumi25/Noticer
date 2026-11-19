@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptyConfig, type Config } from './config.ts'
+import { emptyConfig, type Config, type Rules } from './config.ts'
 import type { EventRecord } from './events.ts'
 import { cardCalendar } from './review.ts'
 
@@ -9,14 +9,14 @@ const ev = (eventAt: number, tags: string[], facts: EventRecord['facts'] = {}): 
   id: nextId++, cardId: 'x', eventAt, timeOffset: 0, note: null, tags, facts,
 })
 
+const unjudged: Rules = { find: { match: 'all', blocks: [] }, now: { kind: 'off' }, back: null }
 const config: Config = {
   ...emptyConfig,
   cards: [
-    { id: 'coffee', tag: '喝咖啡', emoji: '☕', trackerId: null },
-    { id: 'weight', tag: '體重', emoji: '⚖️', trackerId: null, facts: ['weight_kg'] },
-    { id: 'today', tag: '今日', emoji: '📔', trackerId: null, facts: ['mood_emoji'] },
+    { id: 'coffee', tag: '喝咖啡', emoji: '☕', rules: { ...unjudged, back: { span: 'day', measure: { kind: 'times' }, want: { kind: 'atLeast', n: 2 } } } },
+    { id: 'weight', tag: '體重', emoji: '⚖️', rules: unjudged, facts: ['weight_kg'] },
+    { id: 'today', tag: '今日', emoji: '📔', rules: unjudged, facts: ['mood_emoji'] },
   ],
-  trackersPeriodic: [{ id: 'coffee', type: 'dailyCount', source: { tag: '喝咖啡' }, stages: [{ lessThan: 2, status: 'danger' }] }],
   factInputs: {
     weight_kg: { kind: 'number', name: '體重', unit: 'kg', decimals: 1, min: 30, max: 200, steps: [0.1] },
     mood_emoji: { kind: 'choice', name: '心情', options: [{ value: '🙂', label: '不錯' }] },
@@ -32,12 +32,12 @@ describe('cardCalendar', () => {
     expect(days).toHaveLength(31 + 3)
   })
 
-  it("takes counts and states from the card's periodic tracker", () => {
+  it("takes counts and states from the card's looking-back rule", () => {
     const events = [ev(local(11, 2, 8), ['喝咖啡']), ev(local(11, 2, 13), ['喝咖啡']), ev(local(11, 3, 8), ['喝咖啡'])]
     const { days } = cardCalendar(config, card('coffee'), events, local(11, 3, 20))
     expect(days.slice(-2)).toEqual([
       { date: '2026-11-02', value: 2, delta: null, state: 'good' },
-      { date: '2026-11-03', value: 1, delta: null, state: 'danger' },
+      { date: '2026-11-03', value: 1, delta: null, state: 'warning' },
     ])
   })
 

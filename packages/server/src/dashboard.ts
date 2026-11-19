@@ -1,14 +1,15 @@
-import type { Config } from './config.ts'
+import type { CardConfig, Config } from './config.ts'
 import type { EventRecord } from './events.ts'
+import { evaluateDays, evaluateNow, type CardStatus, type DailyStrip } from './rules.ts'
 import { evaluateSleep, SLEEP_CARD, WAKE_CARD, type SleepPair } from './sleep.ts'
-import { evaluateStatus, evaluateStrip, type CardStatus, type DailyStrip } from './trackers.ts'
+import { cardRoot } from './tags.ts'
 
 export interface CardModel {
   id: string
   name: string
   emoji: string
   status: CardStatus
-  mode: 'deadline' | 'cooldown' | null
+  mode: 'worry' | 'soon' | null
   progress: number
   nowHours: number | null
   maxHours: number | null
@@ -32,34 +33,34 @@ const STATUS_PRIORITY: Record<CardStatus, number> = { danger: 1, warning: 2, pen
 function urgency(card: CardModel): number {
   if (card.nowHours == null || card.maxHours == null || card.maxHours <= 0) return -1
   const ratio = card.nowHours / card.maxHours
-  return card.mode === 'cooldown' ? 1 / Math.max(ratio, 0.001) : ratio
+  return card.mode === 'soon' ? 1 / Math.max(ratio, 0.001) : ratio
+}
+
+export function cardModel(card: Pick<CardConfig, 'id' | 'tag' | 'bucket' | 'emoji' | 'rules'>, events: EventRecord[], now: number): CardModel {
+  const root = cardRoot(card)
+  const result = evaluateNow(card.rules, root, events, now)
+  const mode = card.rules.now.kind === 'off' ? null : card.rules.now.kind
+  return {
+    id: card.id,
+    name: card.tag,
+    emoji: card.emoji,
+    status: result.status,
+    mode,
+    progress: result.progress,
+    nowHours: mode !== null && result.lastAt !== null ? (now - result.lastAt) / 3600 : null,
+    maxHours: result.maxHours,
+    strip: evaluateDays(card.rules, root, events, now),
+  }
 }
 
 export function buildDashboard(config: Config, events: EventRecord[], now: number): Dashboard {
-  const status = new Map(config.trackersStatus.map((t) => [t.id, t]))
-  const periodic = new Map(config.trackersPeriodic.map((t) => [t.id, t]))
   const sleepCard = config.cards.find((c) => c.id === SLEEP_CARD)
   const wakeCard = config.cards.find((c) => c.id === WAKE_CARD)
   const hasSleep = sleepCard !== undefined && wakeCard !== undefined
 
   const cards = config.cards
     .filter((c) => !hasSleep || (c.id !== SLEEP_CARD && c.id !== WAKE_CARD))
-    .map((card): CardModel => {
-      const tracker = card.trackerId ? status.get(card.trackerId) : undefined
-      const result = tracker ? evaluateStatus(tracker, events, now) : null
-      const strip = periodic.get(card.id)
-      return {
-        id: card.id,
-        name: card.tag,
-        emoji: card.emoji,
-        status: result?.status ?? 'unknown',
-        mode: tracker?.type ?? null,
-        progress: result?.progress ?? 0,
-        nowHours: result?.lastAt != null ? (now - result.lastAt) / 3600 : null,
-        maxHours: result?.maxHours ?? null,
-        strip: strip ? evaluateStrip(strip, events, now) : null,
-      }
-    })
+    .map((card) => cardModel(card, events, now))
     .sort(
       (a, b) =>
         STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status] || urgency(b) - urgency(a) || a.name.localeCompare(b.name),

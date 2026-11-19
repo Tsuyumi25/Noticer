@@ -15,10 +15,10 @@ const max = computed(() => formatHours(props.card.maxHours))
 /** Countdown cards get a corner symbol; everything else gets a status word. */
 const corner = computed(() => {
   const { mode, status } = props.card
-  if (mode === 'deadline' && hasStatusIcon(status)) return { icon: status }
+  if (mode === 'worry' && hasStatusIcon(status)) return { icon: status }
   if (mode === null) return { word: t('card.noLimit') }
   if (status === 'unknown') return { word: t('card.never') }
-  if (mode === 'cooldown') return { word: status === 'good' ? t('card.ready') : t('card.tooSoon') }
+  if (mode === 'soon') return { word: status === 'good' ? t('card.ready') : t('card.tooSoon') }
   return { word: t('card.almostDue') }
 })
 

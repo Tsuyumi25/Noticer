@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { importRecords, monthFileSchema } from './backup.ts'
 import { writeConfig } from './config.ts'
+import { convertLegacyConfig } from './legacy.ts'
 import { openDb } from './db.ts'
 import { configPath, dbPath } from './paths.ts'
 
@@ -31,10 +32,10 @@ const snapshotPath = join(dir, 'config.json')
 if (existsSync(snapshotPath)) {
   const snapshot = snapshotSchema.parse(JSON.parse(readFileSync(snapshotPath, 'utf8')))
   const byPosition = <T extends { position: number }>(rows: T[]) => [...rows].sort((a, b) => a.position - b.position)
-  writeConfig(configPath, {
+  writeConfig(configPath, convertLegacyConfig({
     cards: byPosition(snapshot.cards).map((c) => ({ id: c.id, tag: c.tag, trackerId: c.tracker_id, ...JSON.parse(c.config) })),
     trackersStatus: byPosition(snapshot.trackers_status).map((t) => ({ id: t.id, type: t.type, ...JSON.parse(t.config) })),
     trackersPeriodic: byPosition(snapshot.trackers_periodic).map((t) => ({ id: t.id, type: t.type, ...JSON.parse(t.config) })),
-  })
+  }))
   console.log(`Wrote config to ${configPath}`)
 }

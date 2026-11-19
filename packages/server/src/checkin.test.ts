@@ -5,13 +5,14 @@ import { openDb, type DB } from './db.ts'
 import { listEvents } from './events.ts'
 import type { CardTags } from './tags.ts'
 
+const unjudged = { find: { match: 'all', blocks: [] }, now: { kind: 'off' }, back: null } as const
 const config = {
   ...emptyConfig,
   cards: [
-    { id: 'skincare', tag: '護膚', emoji: '🧴', trackerId: null },
-    { id: 'sunscreen', tag: '防曬', bucket: '護膚', emoji: '🌞', trackerId: null, hiddenTags: ['化妝水'] },
-    { id: 'weight', tag: '體重', emoji: '⚖️', trackerId: null, facts: ['weight_kg'] },
-    { id: 'practice', tag: '練習', emoji: '🎹', trackerId: null, facts: ['duration_min', 'mood_emoji'] },
+    { id: 'skincare', tag: '護膚', emoji: '🧴', rules: unjudged },
+    { id: 'sunscreen', tag: '防曬', bucket: '護膚', emoji: '🌞', rules: unjudged, hiddenTags: ['化妝水'] },
+    { id: 'weight', tag: '體重', emoji: '⚖️', rules: unjudged, facts: ['weight_kg'] },
+    { id: 'practice', tag: '練習', emoji: '🎹', rules: unjudged, facts: ['duration_min', 'mood_emoji'] },
   ],
   tagGroups: {
     護膚: { emoji: '🧴', groups: [{ name: '保養項目', color: '#3b82f6', tags: [{ label: '化妝水', emoji: '🧴' }, { label: '防曬', emoji: '🌞' }] }] },
@@ -99,7 +100,7 @@ describe('facts', () => {
   })
 
   it('refuses a config whose card names an undefined fact', () => {
-    expect(() => memoryStore({ ...config, cards: [{ id: 'x', tag: 'x', emoji: 'x', trackerId: null, facts: ['nope'] }] }).read()).toThrow(/unknown fact nope/)
+    expect(() => memoryStore({ ...config, cards: [{ id: 'x', tag: 'x', emoji: 'x', rules: unjudged, facts: ['nope'] }] }).read()).toThrow(/unknown fact nope/)
   })
 })
 

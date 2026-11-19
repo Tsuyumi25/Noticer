@@ -2,7 +2,7 @@ import type { CardConfig, Config, TagGroup } from './config.ts'
 import type { DB } from './db.ts'
 
 /** Cards with a bucket share their parent's tag groups; the rest own the groups under their own tag. */
-export function cardRoot(card: CardConfig): string {
+export function cardRoot(card: Pick<CardConfig, 'tag' | 'bucket'>): string {
   return card.bucket ?? card.tag
 }
 

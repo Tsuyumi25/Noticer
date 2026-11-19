@@ -2,14 +2,14 @@ import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { createCheckin } from './checkin.ts'
-import { tagGroupsSchema, type ConfigStore } from './config.ts'
+import { rulesSchema, tagGroupsSchema, type ConfigStore } from './config.ts'
 import { buildDashboard } from './dashboard.ts'
 import type { DB } from './db.ts'
 import { listEvents } from './events.ts'
 import { cardInputs, readFacts } from './facts.ts'
-import { cardCalendar, cardSource } from './review.ts'
+import { cardCalendar, reportCounts } from './review.ts'
+import { SLEEP_CARD, WAKE_CARD } from './sleep.ts'
 import { cardRoot, cardTags } from './tags.ts'
-import { matchesSource } from './trackers.ts'
 
 type Env = { Variables: { db: DB; store: ConfigStore } }
 
@@ -81,8 +81,48 @@ const api = new Hono<Env>()
     const card = config.cards.find((k) => k.id === c.req.param('cardId'))
     if (!card) return c.json({ error: 'unknown card' }, 404)
     const { from, to } = c.req.valid('query')
-    const source = cardSource(config, card)
-    return c.json(listEvents(c.var.db, from, to).filter((e) => matchesSource(e, source)))
+    return c.json(listEvents(c.var.db, from, to).filter((e) => reportCounts(card, e)))
+  })
+  .get('/cards', (c) =>
+    c.json(
+      c.var.store.read().cards.map((k) => ({ id: k.id, name: k.tag, emoji: k.emoji, builtin: k.id === SLEEP_CARD || k.id === WAKE_CARD })),
+    ),
+  )
+  .get('/cards/:cardId/rules', (c) => {
+    const config = c.var.store.read()
+    const card = config.cards.find((k) => k.id === c.req.param('cardId'))
+    if (!card) return c.json({ error: 'unknown card' }, 404)
+    const root = cardRoot(card)
+    const tags = cardTags(c.var.db, config, card)
+    const facts = (card.facts ?? []).flatMap((key) => {
+      const input = config.factInputs[key]!
+      return input.kind === 'number' ? [{ key, name: input.name, unit: input.unit, decimals: input.decimals }] : []
+    })
+    const now = Math.floor(Date.now() / 1000)
+    return c.json({
+      card: { id: card.id, name: card.tag, emoji: card.emoji, tag: card.tag, bucket: card.bucket },
+      root,
+      rules: card.rules,
+      facts,
+      tags: { groups: tags.groups.map((g) => ({ name: g.name, color: g.color, tags: g.tags.map((t) => t.label) })), ungrouped: tags.ungrouped },
+      events: listEvents(c.var.db, 0, now + 1).filter((e) => e.tags.includes(root)),
+      now,
+    })
+  })
+  .put('/cards/:cardId/rules', zValidator('json', rulesSchema), (c) => {
+    const cardId = c.req.param('cardId')
+    const rules = c.req.valid('json')
+    const config = c.var.store.read()
+    const card = config.cards.find((k) => k.id === cardId)
+    if (!card) return c.json({ error: 'unknown card' }, 404)
+    const measure = rules.back?.measure
+    if (measure && 'fact' in measure && (!card.facts?.includes(measure.fact) || config.factInputs[measure.fact]?.kind !== 'number')) {
+      return c.json({ error: `card ${cardId} has no number fact ${measure.fact}` }, 422)
+    }
+    c.var.store.update((raw) => {
+      raw.cards.find((k) => k.id === cardId)!.rules = rules
+    })
+    return c.body(null, 204)
   })
   .put('/cards/:cardId/tag-settings', zValidator('json', tagSettingsBody), (c) => {
     const cardId = c.req.param('cardId')

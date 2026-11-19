@@ -1,13 +1,10 @@
-import type { CardConfig, Config, TrackerSource } from './config.ts'
+import type { CardConfig, Config } from './config.ts'
 import type { EventRecord, FactValue } from './events.ts'
-import { evaluateStrip, matchesSource, type DailyState } from './trackers.ts'
+import { backFind, evaluateDays, matchesFind, type DailyState } from './rules.ts'
+import { cardRoot } from './tags.ts'
 
-/** The events a card reports on: its periodic tracker's, else its status tracker's, else everything tagged with the card. */
-export function cardSource(config: Config, card: CardConfig): TrackerSource {
-  const periodic = config.trackersPeriodic.find((t) => t.id === card.id)
-  if (periodic) return periodic.source
-  const status = card.trackerId ? config.trackersStatus.find((t) => t.id === card.trackerId) : undefined
-  return status?.source ?? { tag: card.tag }
+export function reportCounts(card: CardConfig, event: EventRecord): boolean {
+  return matchesFind(backFind(card.rules), cardRoot(card), event)
 }
 
 export interface CalendarDay {
@@ -16,8 +13,8 @@ export interface CalendarDay {
   value: FactValue | null
   /** Change from the previous day that had a value; only for number facts. */
   delta: number | null
-  /** `logged` marks a day with events on a card that has no tracker to judge it. */
-  state: DailyState | 'logged'
+  /** `logged` marks a day with events and no rule to judge them. */
+  state: DailyState
 }
 
 export interface CardCalendar {
@@ -30,9 +27,15 @@ export interface CardCalendar {
 const dateKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
+function measuredDecimals(config: Config, card: CardConfig): number | null {
+  const measure = card.rules.back?.measure
+  if (!measure || !('fact' in measure)) return null
+  const input = config.factInputs[measure.fact]
+  return input?.kind === 'number' ? input.decimals : null
+}
+
 export function cardCalendar(config: Config, card: CardConfig, events: EventRecord[], now: number): CardCalendar {
-  const source = cardSource(config, card)
-  const matched = events.filter((e) => e.eventAt <= now && matchesSource(e, source))
+  const matched = events.filter((e) => e.eventAt <= now && reportCounts(card, e))
   const today = new Date(now * 1000)
   const first = matched.length ? new Date(matched[0]!.eventAt * 1000) : today
   const start = new Date(first.getFullYear(), first.getMonth(), 1)
@@ -46,8 +49,8 @@ export function cardCalendar(config: Config, card: CardConfig, events: EventReco
     byDate.set(key, [...(byDate.get(key) ?? []), e])
   }
 
-  const periodic = config.trackersPeriodic.find((t) => t.id === card.id)
-  const strip = periodic ? evaluateStrip(periodic, events, now, days) : null
+  const judged = card.rules.back !== null
+  const strip = evaluateDays(card.rules, cardRoot(card), events, now, days)
   const inputs = (card.facts ?? []).map((key) => ({ key, input: config.factInputs[key]! }))
   const numberFact = inputs.find((i) => i.input.kind === 'number')
   const choiceFact = inputs.find((i) => i.input.kind === 'choice')
@@ -56,13 +59,13 @@ export function cardCalendar(config: Config, card: CardConfig, events: EventReco
 
   let previous: number | null = null
   return {
-    card: { id: card.id, name: card.tag, emoji: card.emoji, decimals: !periodic && numberFact ? decimals : null },
+    card: { id: card.id, name: card.tag, emoji: card.emoji, decimals: judged ? measuredDecimals(config, card) : numberFact ? decimals : null },
     days: dates.map((date, i): CalendarDay => {
       const list = byDate.get(date) ?? []
       let value: FactValue | null = strip ? strip.values[i]! : list.length || null
       let state: CalendarDay['state'] = strip ? strip.states[i]! : list.length ? 'logged' : 'none'
       let delta: number | null = null
-      if (!periodic && numberFact) {
+      if (!judged && numberFact) {
         const v = lastFact(list, numberFact.key)
         value = typeof v === 'number' ? v : null
         if (typeof v === 'number') {

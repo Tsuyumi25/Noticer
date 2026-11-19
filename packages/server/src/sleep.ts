@@ -1,5 +1,5 @@
 import type { EventRecord } from './events.ts'
-import type { CardStatus } from './trackers.ts'
+import type { CardStatus } from './rules.ts'
 
 export const SLEEP_CARD = 'sleep_start'
 export const WAKE_CARD = 'sleep_end'

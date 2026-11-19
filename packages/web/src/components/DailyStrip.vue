@@ -67,6 +67,12 @@ const cells = computed(() =>
   opacity: 0.5;
   border-style: dashed;
 }
+.s-logged {
+  --fill: #a5b4fc;
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+  color: #3730a3;
+}
 .s-warning,
 .s-pending {
   --fill: #fbbf24;

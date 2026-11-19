@@ -4,9 +4,11 @@
   "type": "module",
   "exports": {
     "./app": "./src/app.ts",
+    "./config": "./src/config.ts",
     "./dashboard": "./src/dashboard.ts",
     "./facts": "./src/facts.ts",
     "./review": "./src/review.ts",
+    "./rules": "./src/rules.ts",
     "./tags": "./src/tags.ts"
   },
   "scripts": {

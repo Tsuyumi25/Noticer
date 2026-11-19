@@ -3,54 +3,65 @@ import { z } from 'zod'
 
 const statusSchema = z.enum(['good', 'pending', 'warning', 'danger'])
 
-const tagSourceSchema = z.object({
-  tag: z.string(),
-  tags: z.array(z.string()).optional(),
-  allTags: z.array(z.string()).optional(),
-  excludeTags: z.array(z.string()).optional(),
-})
-const sourceSchema = z.union([tagSourceSchema, z.array(tagSourceSchema)])
+const hourSchema = z.number().int().min(0).max(24)
 
-const displaySchema = z.object({ name: z.string(), emoji: z.string() })
-
-const statusTrackerSchema = z.discriminatedUnion('type', [
-  z.object({
-    id: z.string(),
-    type: z.literal('deadline'),
-    display: displaySchema,
-    source: sourceSchema,
-    stages: z.array(z.object({ lessThan: z.number(), status: statusSchema })).min(1),
-  }),
-  z.object({
-    id: z.string(),
-    type: z.literal('cooldown'),
-    display: displaySchema,
-    source: sourceSchema,
-    stages: z.array(z.object({ atLeast: z.number(), status: statusSchema })).min(1),
-    initial: z.object({ status: statusSchema }).optional(),
-  }),
+const filterSchema = z.discriminatedUnion('kind', [
+  /** `has`: carries any of the tags; `all`: carries every one; `not`: carries none of them. */
+  z.object({ kind: z.literal('tag'), op: z.enum(['has', 'all', 'not']), tags: z.array(z.string().min(1)).min(1) }),
+  /** Local hours; `from` after `to` wraps past midnight. */
+  z.object({ kind: z.literal('time'), from: hourSchema, to: hourSchema }),
+  z.object({ kind: z.literal('weekday'), is: z.enum(['weekday', 'weekend']) }),
 ])
 
-const compareStageSchema = z.object({
-  lessThan: z.number().optional(),
-  greaterThan: z.number().optional(),
-  equals: z.number().optional(),
-  status: statusSchema,
+const matchSchema = z.enum(['all', 'any'])
+
+/** Read top to bottom: the first layer joins its rows by its connector; each later layer joins everything above with its own rows by its own. */
+const blockSchema = z
+  .object({ ops: z.array(matchSchema).min(1).max(3), layers: z.array(z.array(filterSchema).min(1)).min(1).max(3) })
+  .refine((b) => b.ops.length === b.layers.length, { message: 'each layer needs its connector' })
+
+/** Which of the events tagged with the card's root count: blocks joined by `match`. */
+const findSchema = z.object({ match: matchSchema, blocks: z.array(blockSchema) })
+
+const secondsSchema = z.number().int().positive()
+
+const nowSchema = z.discriminatedUnion('kind', [
+  z
+    .object({ kind: z.literal('worry'), after: secondsSchema, panic: secondsSchema.optional() })
+    .refine((n) => n.panic === undefined || n.panic > n.after, { message: 'panic must come after after' }),
+  z.object({ kind: z.literal('soon'), within: secondsSchema }),
+  z.object({ kind: z.literal('off') }),
+])
+
+const measureSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('times') }),
+  z.object({ kind: z.literal('total'), fact: z.string() }),
+  z.object({ kind: z.literal('last'), fact: z.string() }),
+  z.object({ kind: z.literal('since') }),
+])
+
+const amountSchema = z.number().min(0)
+
+const wantSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('atLeast'), n: amountSchema }),
+  z
+    .object({ kind: z.literal('atMost'), n: amountSchema, red: amountSchema.optional() })
+    .refine((w) => w.red === undefined || w.red > w.n, { message: 'red must be above n' }),
+  z
+    .object({ kind: z.literal('between'), lo: amountSchema, hi: amountSchema })
+    .refine((w) => w.lo <= w.hi, { message: 'lo must not exceed hi' }),
+  z.object({ kind: z.literal('off') }),
+])
+
+const backSchema = z.object({
+  span: z.enum(['day', 'week']),
+  measure: measureSchema,
+  want: wantSchema,
+  /** Looking back counts other events than the home card does. */
+  find: findSchema.optional(),
 })
 
-const periodicTrackerSchema = z.discriminatedUnion('type', [
-  z.object({ id: z.string(), type: z.literal('dailyCount'), source: sourceSchema, stages: z.array(compareStageSchema) }),
-  z.object({ id: z.string(), type: z.literal('duration'), source: sourceSchema, stages: z.array(compareStageSchema) }),
-  z.object({ id: z.string(), type: z.literal('interval'), source: sourceSchema, stages: z.array(compareStageSchema) }),
-  z.object({ id: z.string(), type: z.literal('dailyBinary'), source: sourceSchema }),
-  z.object({ id: z.string(), type: z.literal('dailyAbsence'), source: sourceSchema }),
-  z.object({
-    id: z.string(),
-    type: z.literal('periodLimit'),
-    source: sourceSchema,
-    target: z.object({ limit: z.number(), period: z.number() }),
-  }),
-])
+export const rulesSchema = z.object({ find: findSchema, now: nowSchema, back: backSchema.nullable() })
 
 const numberInputSchema = z
   .object({
@@ -83,7 +94,7 @@ const cardSchema = z.object({
   defaultTags: z.array(z.string()).optional(),
   hiddenTags: z.array(z.string()).optional(),
   emoji: z.string(),
-  trackerId: z.string().nullable(),
+  rules: rulesSchema,
   /** Keys into factInputs, in the order the sheet shows them. */
   facts: z.array(z.string()).optional(),
 })
@@ -103,8 +114,6 @@ const tagRootSchema = z.object({ emoji: z.string().optional(), groups: tagGroups
 export const configSchema = z
   .object({
     cards: z.array(cardSchema),
-    trackersStatus: z.array(statusTrackerSchema),
-    trackersPeriodic: z.array(periodicTrackerSchema),
     tagGroups: z.record(z.string(), tagRootSchema).default({}),
     factInputs: z.record(z.string(), factInputSchema).default({}),
   })
@@ -113,21 +122,29 @@ export const configSchema = z
       for (const key of card.facts ?? []) {
         if (!(key in config.factInputs)) ctx.addIssue({ code: 'custom', message: `card ${card.id} uses unknown fact ${key}` })
       }
+      const measure = card.rules.back?.measure
+      if (measure && 'fact' in measure && (!card.facts?.includes(measure.fact) || config.factInputs[measure.fact]?.kind !== 'number')) {
+        ctx.addIssue({ code: 'custom', message: `card ${card.id} measures ${measure.fact}, which is not one of its number facts` })
+      }
     }
   })
 
 export type Config = z.infer<typeof configSchema>
-export type TagSource = z.infer<typeof tagSourceSchema>
-export type TrackerSource = z.infer<typeof sourceSchema>
-export type StatusTrackerConfig = z.infer<typeof statusTrackerSchema>
-export type PeriodicTrackerConfig = z.infer<typeof periodicTrackerSchema>
-export type CompareStage = z.infer<typeof compareStageSchema>
+export type Rules = z.infer<typeof rulesSchema>
+export type Find = z.infer<typeof findSchema>
+export type Block = z.infer<typeof blockSchema>
+export type Match = z.infer<typeof matchSchema>
+export type Filter = z.infer<typeof filterSchema>
+export type NowRule = z.infer<typeof nowSchema>
+export type BackRule = z.infer<typeof backSchema>
+export type Want = z.infer<typeof wantSchema>
+export type Measure = z.infer<typeof measureSchema>
 export type CardConfig = z.infer<typeof cardSchema>
 export type FactInput = z.infer<typeof factInputSchema>
 export type TagGroup = z.infer<typeof tagGroupsSchema>[number]
 export type RuleStatus = z.infer<typeof statusSchema>
 
-export const emptyConfig: Config = { cards: [], trackersStatus: [], trackersPeriodic: [], tagGroups: {}, factInputs: {} }
+export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {} }
 
 /** The file as stored: card entries keep fields this app does not model yet (memo…). */
 export type RawConfig = {

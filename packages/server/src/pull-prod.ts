@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { importRecords, recordSchema, type BackupRecord } from './backup.ts'
 import { writeConfig, type FactInput, type RawConfig } from './config.ts'
+import { convertLegacyConfig } from './legacy.ts'
 import { openDb } from './db.ts'
 import { configPath, dbPath } from './paths.ts'
 
@@ -48,7 +49,7 @@ const mapped = cards.map(({ inputComponent, showMoodPicker, ...card }) => {
   const fact = COMPONENT_FACTS[String(inputComponent)] ?? (showMoodPicker === true ? 'mood_emoji' : undefined)
   return fact ? { ...card, facts: [fact] } : card
 })
-writeConfig(configPath, { cards: mapped, trackersStatus, trackersPeriodic, tagGroups, factInputs: FACT_INPUTS })
+writeConfig(configPath, convertLegacyConfig({ cards: mapped, trackersStatus, trackersPeriodic, tagGroups, factInputs: FACT_INPUTS }))
 console.log(`Wrote config to ${configPath}`)
 
 const historyPage = z.object({ data: z.array(recordSchema.passthrough()) })
