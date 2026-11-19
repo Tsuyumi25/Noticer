@@ -27,12 +27,8 @@ const label = computed(() => (props.card.mode !== null && props.card.nowHours ==
 </script>
 
 <template>
-  <div
-    class="card"
-    :class="{ pulse: card.status === 'danger' }"
-    :style="{ '--accent': ACCENT[card.status], background: BACKGROUND[card.status] }"
-  >
-    <WaterSurface :height="100 - card.progress" :seconds="WAVE_SECONDS[card.status]" />
+  <div class="card" :style="{ '--accent': ACCENT[card.status], background: BACKGROUND[card.status] }">
+    <WaterSurface :height="100 - card.progress" :seconds="WAVE_SECONDS[card.status]" :color="ACCENT[card.status]" />
     <StatusCorner v-bind="corner" />
     <div class="body">
       <div class="name">{{ card.name }}</div>
@@ -61,13 +57,6 @@ const label = computed(() => (props.card.mode !== null && props.card.nowHours ==
   border-radius: 12px;
   border: 2px solid var(--accent);
   box-shadow: rgba(15, 23, 42, 0.18) 0 4px 12px;
-}
-.pulse {
-  animation: pulse 2s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45), rgba(15, 23, 42, 0.18) 0 4px 12px; }
-  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0), rgba(15, 23, 42, 0.18) 0 4px 12px; }
 }
 .body {
   position: relative;

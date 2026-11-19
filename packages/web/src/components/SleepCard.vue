@@ -54,7 +54,7 @@ const corner = computed(() => {
         @click="$emit('open', { id: h.id, name: h.name, emoji: h.emoji })"
       >
         <template v-if="h.lit">
-          <WaterSurface :height="100 - sleep.progress" :seconds="WAVE_SECONDS[sleep.status]" />
+          <WaterSurface :height="100 - sleep.progress" :seconds="WAVE_SECONDS[sleep.status]" :color="ACCENT[sleep.status]" />
           <StatusCorner v-bind="corner" />
         </template>
         <div class="body">
