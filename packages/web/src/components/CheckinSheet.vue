@@ -241,14 +241,22 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <ValuePad
           v-if="pad && specOf.get(pad)"
           :key="pad"
-          :input="specOf.get(pad)!"
           :label="pad"
+          :unit="specOf.get(pad)!.unit"
+          :decimals="specOf.get(pad)!.decimals"
           :value="padValue"
+          :candidates="specOf.get(pad)!.candidates"
+          :fallback="specOf.get(pad)!.default"
           :row="specOf.get(pad)!.auto ? PAD_ROWS[card.id] : undefined"
+          skippable
           @done="setAmount(pad!, $event)"
           @remove="dropAmount(pad!)"
           @cancel="pad = null"
-        />
+        >
+          <template #aside>
+            <span class="text-xs text-zinc-500">{{ specOf.get(pad)!.unit }} · {{ t(specOf.get(pad)!.keep === 'sum' ? 'pad.sum' : 'pad.latest') }}</span>
+          </template>
+        </ValuePad>
         <footer v-else class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <div v-if="editing" class="grid grid-cols-2 gap-3">
             <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="picker?.addGroup()">{{ t('sheet.addGroup') }}</button>

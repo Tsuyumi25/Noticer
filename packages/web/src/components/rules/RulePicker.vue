@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import type { BackRule, Measure, Rules, Want } from 'server/config'
-import { dayStarts, DURATIONS } from 'server/rules'
-import { computed } from 'vue'
+import { dayStarts, DURATIONS, durationAfter, durationBefore } from 'server/rules'
+import { computed, ref, watch } from 'vue'
 import { locale, t, tn, type MessageKey } from '../../i18n/index.ts'
 import { ACCENT } from '../../status.ts'
+import ValuePad from '../ValuePad.vue'
 import { PREVIEW_DAYS, useRules, type Trial } from './context.ts'
 import FindPicker from './FindPicker.vue'
-import { amount, clock, duration, elapsed, measureLabel, statusWord } from './words.ts'
+import { amount, clock, elapsed, measureLabel, statusWord } from './words.ts'
 
 const { data, draft, tab, picker, findOf, counted, gaps, trial, days, closePicker: close } = useRules()
 const p = computed(() => picker.value!)
 const FIND_KINDS = new Set(['add', 'tags', 'hour', 'weekday'])
 
 const H = 3600
+const DAY = 86400
 
 const find = computed(() => ('tab' in p.value ? findOf(draft.value, p.value.tab) : draft.value.find))
 type Option = { key: string; label: string; desc?: string; on?: boolean; trial?: Trial; pick: () => void }
@@ -87,25 +89,72 @@ const options = computed<{ title: string; sub?: string; list: Option[] } | null>
 })
 
 type Field = 'soon' | 'warn' | 'danger'
-const durationChoices = computed(() => {
-  if (p.value.kind !== 'duration') return []
-  const field = p.value.field
+type DurationUnit = 'hour' | 'day'
+const UNIT_SECONDS: Record<DurationUnit, number> = { hour: H, day: DAY }
+
+const durationField = computed(() => (p.value.kind === 'duration' ? p.value.field : null))
+const durationNow = computed(() => {
+  const f = durationField.value
   const { soon, late } = draft.value.now
-  const current = field === 'soon' ? soon : late?.[field]
-  const sorted = gaps.value
-  let list = sorted.length ? DURATIONS.filter((d) => d >= sorted[0]! / 2 && d <= sorted.at(-1)! * 1.5) : DURATIONS
-  if (list.length < 6) list = DURATIONS
-  const lo = field === 'warn' ? soon : field === 'danger' ? late?.warn : undefined
-  const hi = field === 'soon' ? late?.warn : field === 'warn' ? late?.danger : undefined
-  list = list.filter((d) => (lo === undefined || d > lo) && (hi === undefined || d < hi))
-  if (current !== undefined && !list.includes(current)) list = [...list, current].sort((a, b) => a - b)
-  return list.map((d) => ({ d, on: d === current }))
+  return f === null ? undefined : f === 'soon' ? soon : late?.[f]
 })
-function setDuration(field: Field, d: number) {
+const durationUnit = ref<DurationUnit>('hour')
+/** Seconds shown when the pad (re)opens; follows what was typed across a unit switch. */
+const durationSeconds = ref<number | null>(null)
+watch(
+  durationField,
+  (f) => {
+    if (f === null) return
+    const s = durationNow.value ?? null
+    durationSeconds.value = s
+    durationUnit.value = s !== null && s >= DAY && s % (DAY / 2) === 0 ? 'day' : 'hour'
+  },
+  { immediate: true },
+)
+const durationPad = ref<{ current: number | null } | null>(null)
+function switchUnit(unit: DurationUnit) {
+  const typed = durationPad.value?.current
+  if (typed != null) durationSeconds.value = Math.round(typed * UNIT_SECONDS[durationUnit.value])
+  durationUnit.value = unit
+}
+
+/** Common gaps between records, as tidy durations the field can take, in the unit on show. */
+const durationCandidates = computed(() => {
+  const f = durationField.value
+  if (f === null) return []
+  const { soon, late } = draft.value.now
+  const lo = f === 'warn' ? soon : f === 'danger' ? late?.warn : undefined
+  const hi = f === 'soon' ? late?.warn : f === 'warn' ? late?.danger : undefined
+  const tidy = (s: number) => DURATIONS.reduce((a, b) => (Math.abs(b - s) < Math.abs(a - s) ? b : a))
+  const q = (x: number) => gaps.value[Math.min(gaps.value.length - 1, Math.floor(gaps.value.length * x))]!
+  const picks = gaps.value.length ? [0.1, 0.5, 0.75, 0.95].map((x) => tidy(q(x))) : [4 * H, DAY, 3 * DAY, 7 * DAY]
+  const per = UNIT_SECONDS[durationUnit.value]
+  return [...new Set(picks)]
+    .filter((d) => (lo === undefined || d > lo) && (hi === undefined || d < hi) && Number.isInteger((d / per) * 10))
+    .sort((a, b) => a - b)
+    .map((d) => d / per)
+})
+
+/** The edited bound wins; the others move out of its way. */
+function setDuration(field: Field, seconds: number) {
   const now = draft.value.now
-  if (field === 'soon') now.soon = d
-  else if (now.late) now.late[field] = d
+  if (field === 'soon') {
+    now.soon = seconds
+    if (now.late && now.late.warn <= seconds) now.late.warn = durationAfter(seconds)
+  } else if (now.late) {
+    now.late[field] = seconds
+    if (field === 'warn' && now.soon !== undefined && now.soon >= seconds) now.soon = durationBefore(seconds)
+    if (field === 'danger' && now.late.warn >= seconds) now.late.warn = durationBefore(seconds)
+    if (now.soon !== undefined && now.soon >= now.late.warn) now.soon = durationBefore(now.late.warn)
+  }
+  if (now.late && now.late.danger <= now.late.warn) now.late.danger = durationAfter(now.late.warn)
   close()
+}
+function doneDuration(value: number | null) {
+  const f = durationField.value
+  if (f === null) return
+  if (value === null || value <= 0) return close()
+  setDuration(f, Math.round(value * UNIT_SECONDS[durationUnit.value]))
 }
 function removeSide(field: Field) {
   if (field === 'soon') delete draft.value.now.soon
@@ -171,9 +220,30 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
 <template>
   <Teleport to="body">
     <div class="fixed inset-0 z-[60] flex items-end bg-black/40" @click.self="close">
-      <section class="flex max-h-[82dvh] w-full flex-col rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)]">
+      <section class="flex max-h-[82dvh] w-full flex-col rounded-t-2xl bg-white" :class="{ 'pb-[env(safe-area-inset-bottom)]': p.kind !== 'duration' }">
         <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
-        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">
+        <ValuePad
+          v-if="p.kind === 'duration'"
+          ref="durationPad"
+          :key="durationUnit"
+          class="border-t-0"
+          :label="fieldTitle(p.field)"
+          :unit="t(`time.unit.${durationUnit}`)"
+          :decimals="1"
+          :value="durationSeconds === null ? null : durationSeconds / UNIT_SECONDS[durationUnit]"
+          :candidates="durationCandidates"
+          trim
+          @done="doneDuration"
+          @remove="removeSide((p as { field: Field }).field)"
+          @cancel="close"
+        >
+          <template #aside>
+            <span class="unitseg">
+              <button v-for="u in ['hour', 'day'] as const" :key="u" :class="{ on: durationUnit === u }" @click="switchUnit(u)">{{ t(`time.unit.${u}`) }}</button>
+            </span>
+          </template>
+        </ValuePad>
+        <div v-else class="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">
           <FindPicker v-if="FIND_KINDS.has(p.kind)" />
           <template v-else-if="options">
             <h2 class="px-4 pt-2 text-base font-semibold">{{ options.title }}</h2>
@@ -192,20 +262,6 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
                   </span>
                   <span v-else class="bar"><b v-for="x in tally(o.trial)" :key="x.s" :style="{ width: x.width, background: FILL[x.s] }" /></span>
                 </span>
-              </button>
-            </div>
-          </template>
-
-          <template v-else-if="p.kind === 'duration'">
-            <h2 class="px-4 pt-2 text-base font-semibold">{{ fieldTitle(p.field) }}</h2>
-            <div class="mt-3 grid grid-cols-3 gap-2 px-4">
-              <button v-for="c in durationChoices" :key="c.d" class="chip" :class="{ on: c.on }" @click="setDuration((p as { field: Field }).field, c.d)">
-                {{ duration(c.d) }}
-              </button>
-            </div>
-            <div class="mt-4 px-4">
-              <button class="opt font-semibold text-red-600" @click="removeSide((p as { field: Field }).field)">
-                {{ t(p.field === 'soon' ? 'rules.now.removeSoon' : 'rules.now.removeLate') }}
               </button>
             </div>
           </template>
@@ -264,6 +320,31 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
 </template>
 
 <style scoped>
+.unitseg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 10px;
+  background: #f4f4f5;
+}
+.unitseg button {
+  position: relative;
+  min-width: 52px;
+  height: 32px;
+  border-radius: 8px;
+  color: #71717a;
+  font-size: 14px;
+}
+.unitseg button::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+.unitseg button.on {
+  background: white;
+  color: #18181b;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+}
 .opt {
   display: flex;
   min-height: 60px;

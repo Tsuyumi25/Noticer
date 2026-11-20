@@ -1,26 +1,41 @@
 <script setup lang="ts">
-import type { ValueInput } from 'server/facts'
 import { computed, ref, type Component } from 'vue'
 import { t } from '../i18n/index.ts'
 
-/** The keypad that replaces the sheet's footer while one tag's value is being set; `row` is a card's own row in place of the usual amounts. */
-const props = defineProps<{ input: ValueInput; label: string; value: number | null; row?: Component }>()
+/**
+ * A keypad that takes the place of a sheet's footer while one number is being set.
+ * `candidates` are one-tap amounts; `row` replaces them with a card's own row; `aside` slots in beside the label.
+ */
+const props = defineProps<{
+  label: string
+  unit: string
+  decimals: number
+  value: number | null
+  candidates: number[]
+  fallback?: number | null
+  row?: Component
+  /** Offer a key that saves no number at all. */
+  skippable?: boolean
+  /** Show 5 rather than 5.0 when the decimals are only there to allow a half. */
+  trim?: boolean
+}>()
 const emit = defineEmits<{ done: [value: number | null]; remove: []; cancel: [] }>()
 
 const base = ref(props.value)
 /** Digits typed since the pad opened; null until the first key. */
 const typed = ref<string | null>(null)
 
-const format = (v: number) => v.toFixed(props.input.decimals)
+const format = (v: number) => (props.trim ? String(Number(v.toFixed(props.decimals))) : v.toFixed(props.decimals))
 const current = computed(() => (typed.value !== null ? (typed.value === '' ? null : Number(typed.value)) : base.value))
 const shown = computed(() => typed.value ?? (base.value === null ? '' : format(base.value)))
+defineExpose({ current })
 
 function key(d: string) {
   const s = typed.value ?? ''
-  if (d === '.' && (props.input.decimals === 0 || s.includes('.'))) return
+  if (d === '.' && (props.decimals === 0 || s.includes('.'))) return
   const next = (s === '' && d === '.' ? '0' : s) + d
   const dot = next.indexOf('.')
-  if (dot >= 0 && next.length - dot - 1 > props.input.decimals) return
+  if (dot >= 0 && next.length - dot - 1 > props.decimals) return
   if (next.replace('.', '').length <= 7) typed.value = next
 }
 
@@ -36,18 +51,18 @@ function setBase(v: number) {
 
 <template>
   <div class="shrink-0 border-t border-zinc-200 bg-white px-4 pt-2">
-    <div class="flex items-baseline justify-between">
+    <div class="flex min-h-7 items-center justify-between">
       <span class="font-semibold">{{ label }}</span>
-      <span class="text-xs text-zinc-500">{{ input.unit }} · {{ t(input.keep === 'sum' ? 'pad.sum' : 'pad.latest') }}</span>
+      <slot name="aside" />
     </div>
     <div class="text-center text-[34px] leading-tight font-bold tabular-nums" :class="shown === '' ? 'text-zinc-300' : 'text-indigo-700'">
-      {{ shown === '' ? '—' : shown }}<span class="ml-1 text-base font-medium text-zinc-500">{{ input.unit }}</span>
+      {{ shown === '' ? '—' : shown }}<span class="ml-1 text-base font-medium text-zinc-500">{{ unit }}</span>
     </div>
     <div v-if="row" class="row">
-      <component :is="row" :value="current" :fallback="input.default" :decimals="input.decimals" @set="setBase" />
+      <component :is="row" :value="current" :fallback="fallback ?? null" :decimals="decimals" @set="setBase" />
     </div>
-    <div v-else-if="input.candidates.length" class="row">
-      <button v-for="c in input.candidates" :key="c" class="fine" :class="{ on: typed === null && base === c }" @click="emit('done', c)">{{ format(c) }}</button>
+    <div v-else-if="candidates.length" class="row">
+      <button v-for="c in candidates" :key="c" class="fine" :class="{ on: typed === null && base === c }" @click="emit('done', c)">{{ format(c) }}</button>
     </div>
     <div class="keys">
       <button v-for="n in [1, 2, 3]" :key="n" @click="key(String(n))">{{ n }}</button>
@@ -55,8 +70,9 @@ function setBase(v: number) {
       <button v-for="n in [4, 5, 6]" :key="n" @click="key(String(n))">{{ n }}</button>
       <button class="op" @click="backspace">⌫</button>
       <button v-for="n in [7, 8, 9]" :key="n" @click="key(String(n))">{{ n }}</button>
-      <button class="op" @click="emit('done', null)">{{ t('pad.skip') }}</button>
-      <button :disabled="input.decimals === 0" class="disabled:opacity-30" @click="key('.')">.</button>
+      <button v-if="skippable" class="op" @click="emit('done', null)">{{ t('pad.skip') }}</button>
+      <span v-else />
+      <button :disabled="decimals === 0" class="disabled:opacity-30" @click="key('.')">.</button>
       <button @click="key('0')">0</button>
       <button @click="key('00')">00</button>
       <button class="op text-red-600" @click="emit('remove')">{{ t('pad.remove') }}</button>

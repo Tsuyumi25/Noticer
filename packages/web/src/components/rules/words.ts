@@ -5,7 +5,9 @@ import type { RulesData } from './context.ts'
 const D = 86400
 const H = 3600
 
-export const duration = (seconds: number) => (seconds % D === 0 ? tn('time.days', seconds / D) : tn('time.hours', Math.round((seconds / H) * 10) / 10))
+/** Whole or half days read as days; anything else as hours. */
+export const duration = (seconds: number) =>
+  seconds >= D && seconds % (D / 2) === 0 ? tn('time.days', seconds / D) : tn('time.hours', Math.round((seconds / H) * 10) / 10)
 
 export const elapsed = (seconds: number) =>
   seconds >= 2 * D ? tn('time.days', Number((seconds / D).toFixed(1))) : tn('time.hours', Number((seconds / H).toFixed(1)))
