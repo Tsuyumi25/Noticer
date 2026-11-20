@@ -69,7 +69,7 @@ const openTags = (at: RowPath, row: Extract<Filter, { kind: 'tag' }>) => (picker
       <SwitchRow :title="t('rules.sameFind')" :on="same" @click="toggleSame" />
     </template>
     <template v-if="!same" #head>
-      <Phrase :text="t('rules.find.head')">
+      <Phrase :text="t(find.blocks.length ? 'rules.find.head' : 'rules.find.all')">
         <template #root><b class="font-semibold">{{ t('common.quoted', { text: data.root }) }}</b></template>
       </Phrase>
       <template v-if="find.blocks.length">{{ t('rules.find.where') }}</template>

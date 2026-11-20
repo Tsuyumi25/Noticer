@@ -48,7 +48,7 @@ const calendar = computed(() => {
 const legend = computed(() => (draft.value.back ? (['good', 'warning', 'danger', 'none'] as const) : (['logged', 'none'] as const)))
 
 const TABS: { key: Tab; icon: Component; label: MessageKey; hint: MessageKey }[] = [
-  { key: 'now', icon: Clock, label: 'rules.tab.now', hint: 'rules.tab.nowHint' },
+  { key: 'now', icon: Clock, label: 'card.since', hint: 'rules.tab.nowHint' },
   { key: 'back', icon: Calendar, label: 'rules.tab.back', hint: 'rules.tab.backHint' },
 ]
 </script>
