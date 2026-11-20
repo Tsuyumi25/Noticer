@@ -48,11 +48,13 @@ describe('matchesFind', () => {
     expect(matchesFind(find, '護膚', ev(local(13), ['護膚', '全套']))).toBe(true)
   })
 
-  it('reads time windows in local hours, wrapping past midnight', () => {
-    expect(one({ kind: 'time', from: 6, to: 10 })).toBe(true)
-    expect(one({ kind: 'time', from: 8, to: 8 })).toBe(false)
-    expect(one({ kind: 'time', from: 22, to: 9 })).toBe(true)
-    expect(one({ kind: 'time', from: 22, to: 8 })).toBe(false)
+  it('reads time windows in local minutes, wrapping past midnight', () => {
+    expect(one({ kind: 'time', from: 6 * 60, to: 10 * 60 })).toBe(true)
+    expect(one({ kind: 'time', from: 8 * 60, to: 8 * 60 })).toBe(false)
+    expect(one({ kind: 'time', from: 22 * 60, to: 9 * 60 })).toBe(true)
+    expect(one({ kind: 'time', from: 22 * 60, to: 8 * 60 })).toBe(false)
+    expect(one({ kind: 'time', from: 7 * 60 + 59, to: 8 * 60 + 1 })).toBe(true)
+    expect(one({ kind: 'time', from: 8 * 60 + 1, to: 10 * 60 })).toBe(false)
   })
 
   it('tells weekdays from weekends', () => {

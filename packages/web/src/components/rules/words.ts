@@ -16,7 +16,8 @@ export function duration(seconds: number): string {
 export const elapsed = (seconds: number) =>
   seconds >= 2 * D ? tn('time.days', Number((seconds / D).toFixed(1))) : tn('time.hours', Number((seconds / H).toFixed(1)))
 
-export const hour = (h: number) => `${String(h).padStart(2, '0')}:00`
+/** Minutes after midnight as 06:30. */
+export const timeOfDay = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 
 export const clock = (seconds: number) =>
   new Intl.DateTimeFormat(locale.value, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(seconds * 1000)

@@ -4,9 +4,9 @@ import { computed } from 'vue'
 import { t } from '../../i18n/index.ts'
 import { useRules, type Picker, type TagOp } from './context.ts'
 import { canDeepen, placeRow, removeRow, rowAt, type Place, type RowPath } from './find.ts'
-import { hour } from './words.ts'
+import { timeOfDay } from './words.ts'
 
-type FindPicker = Extract<Picker, { kind: 'add' | 'tags' | 'hour' | 'weekday' }>
+type FindPicker = Extract<Picker, { kind: 'add' | 'tags' | 'clock' | 'weekday' }>
 
 const { data, draft, picker, findOf, closePicker } = useRules()
 const p = computed(() => picker.value as FindPicker)
@@ -24,7 +24,7 @@ const title = computed(() => {
   const cur = p.value
   if (cur.kind === 'add') return t(cur.place.kind === 'block' ? 'rules.find.add' : cur.place.kind === 'layer' ? 'rules.add.same' : 'rules.add.deeper')
   if (cur.kind === 'tags') return t(op.value === 'not' ? 'rules.pick.tagsNot' : 'rules.pick.tagsHas')
-  if (cur.kind === 'hour') return t(cur.field === 'from' ? 'rules.pick.from' : 'rules.pick.to')
+  if (cur.kind === 'clock') return t(cur.field === 'from' ? 'rules.pick.from' : 'rules.pick.to')
   return t('rules.pick.weekday')
 })
 
@@ -34,7 +34,7 @@ function addKind(kind: 'has' | 'not' | 'time' | 'weekday') {
     picker.value = { kind: 'tags', tab: cur.tab, op: kind, place: cur.place }
     return
   }
-  const fresh: Filter = kind === 'time' ? { kind: 'time', from: 6, to: 10 } : { kind: 'weekday', is: 'weekday' }
+  const fresh: Filter = kind === 'time' ? { kind: 'time', from: 6 * 60, to: 10 * 60 } : { kind: 'weekday', is: 'weekday' }
   placeRow(find.value, cur.place, fresh)
   closePicker()
 }
@@ -81,11 +81,14 @@ function remove(at: RowPath) {
   picker.value = null
 }
 
-function setHour(h: number) {
+const clock = computed(() => (row.value?.kind === 'time' && p.value.kind === 'clock' ? row.value[p.value.field] : 0))
+/** Minutes first keeps the sheet open; the hour sets the time and closes it. */
+function setClock(hour: number | null, minute: number | null) {
   const r = row.value
   const cur = p.value
-  if (r?.kind === 'time' && cur.kind === 'hour') r[cur.field] = h
-  closePicker()
+  if (r?.kind !== 'time' || cur.kind !== 'clock') return
+  r[cur.field] = (hour ?? Math.floor(clock.value / 60)) * 60 + (minute ?? clock.value % 60)
+  if (hour !== null) closePicker()
 }
 
 function setWeekday(is: 'weekday' | 'weekend') {
@@ -115,11 +118,18 @@ const KINDS = ['has', 'not', 'time', 'weekday'] as const
     </section>
   </template>
 
-  <div v-else-if="p.kind === 'hour' && row?.kind === 'time'" class="mt-3 grid grid-cols-4 gap-2 px-4">
-    <button v-for="h in 24" :key="h" class="chip justify-center tabular-nums" :class="{ on: row[p.field] === h - 1 }" @click="setHour(h - 1)">
-      {{ hour(h - 1) }}
-    </button>
-  </div>
+  <template v-else-if="p.kind === 'clock' && row?.kind === 'time'">
+    <div class="mt-3 grid grid-cols-4 gap-2 px-4">
+      <button v-for="m in [0, 15, 30, 45]" :key="m" class="opt justify-center tabular-nums" :class="{ on: clock % 60 === m }" @click="setClock(null, m)">
+        :{{ String(m).padStart(2, '0') }}
+      </button>
+    </div>
+    <div class="mt-3 grid grid-cols-4 gap-2 px-4">
+      <button v-for="h in 24" :key="h" class="chip justify-center tabular-nums" :class="{ on: Math.floor(clock / 60) === h - 1 }" @click="setClock(h - 1, null)">
+        {{ timeOfDay((h - 1) * 60 + (clock % 60)) }}
+      </button>
+    </div>
+  </template>
 
   <div v-else-if="p.kind === 'weekday' && row?.kind === 'weekday'" class="mt-3 flex flex-col gap-2 px-4">
     <button v-for="is in ['weekday', 'weekend'] as const" :key="is" class="opt" :class="{ on: row.is === is }" @click="setWeekday(is)">

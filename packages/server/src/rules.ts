@@ -37,8 +37,8 @@ export function filterMatches(filter: Filter, event: EventRecord): boolean {
     }
     case 'time': {
       const d = new Date(event.eventAt * 1000)
-      const h = d.getHours() + d.getMinutes() / 60
-      return filter.from <= filter.to ? h >= filter.from && h < filter.to : h >= filter.from || h < filter.to
+      const m = d.getHours() * 60 + d.getMinutes()
+      return filter.from <= filter.to ? m >= filter.from && m < filter.to : m >= filter.from || m < filter.to
     }
     case 'weekday': {
       const day = new Date(event.eventAt * 1000).getDay()

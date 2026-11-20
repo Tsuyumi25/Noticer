@@ -106,13 +106,13 @@ describe('values', () => {
     expect(values).toEqual([expect.objectContaining({ tag: '體重', unit: 'kg', auto: true, default: 50.4, candidates: [], open: true })])
   })
 
-  it('defaults an adding value to its most frequent one, and lends a tag without history the same unit’s values', async () => {
+  it('defaults an adding value to its most frequent one, lends a tag without history the same unit’s values, and opens no keypad for tags the card does not attach', async () => {
     const { send } = setup()
     for (const v of [20, 20, 10, 20]) await post(send, 'practice', ['鋼琴'], { '鋼琴:分鐘': v, mood_emoji: '🙂' })
     const { values } = await (await send('GET', '/api/cards/practice/inputs')).json()
     expect(values).toEqual([
       expect.objectContaining({ tag: '鋼琴', auto: false, default: 20, candidates: [20, 10], open: false }),
-      expect.objectContaining({ tag: '吉他', default: 20, candidates: [20, 10], open: true }),
+      expect.objectContaining({ tag: '吉他', default: 20, candidates: [20, 10], open: false }),
     ])
   })
 

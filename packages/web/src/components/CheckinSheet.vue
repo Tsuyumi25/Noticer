@@ -5,7 +5,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
-import { PAD_ROWS } from '../plugins/index.ts'
+import { PAD_ROW_COMPONENTS } from '../plugins/index.ts'
 import { absoluteTime, relativeTime } from '../time.ts'
 import TagPicker from './TagPicker.vue'
 import TimeOffsetPopup from './TimeOffsetPopup.vue'
@@ -247,7 +247,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           :value="padValue"
           :candidates="specOf.get(pad)!.candidates"
           :fallback="specOf.get(pad)!.default"
-          :row="specOf.get(pad)!.auto ? PAD_ROWS[card.id] : undefined"
+          :row="specOf.get(pad)!.pad ? PAD_ROW_COMPONENTS[specOf.get(pad)!.pad!] : undefined"
           skippable
           removable
           @done="setAmount(pad!, $event)"

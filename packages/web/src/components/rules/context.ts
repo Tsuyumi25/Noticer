@@ -16,7 +16,7 @@ export type Picker =
   | { kind: 'add'; tab: Tab; place: Place }
   /** Without `at` the row does not exist yet; the first tag picked creates it at `place`. */
   | { kind: 'tags'; tab: Tab; op: TagOp; at?: RowPath; place?: Place }
-  | { kind: 'hour'; tab: Tab; at: RowPath; field: 'from' | 'to' }
+  | { kind: 'clock'; tab: Tab; at: RowPath; field: 'from' | 'to' }
   | { kind: 'weekday'; tab: Tab; at: RowPath }
   | { kind: 'records'; tab: Tab }
   | { kind: 'span' | 'measure' | 'want' }

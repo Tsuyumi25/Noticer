@@ -251,7 +251,7 @@ async function saveValues(tag: string, spec: ValueSpec | null) {
   if (!root) return
   const values: Record<string, ValueSpec> = {}
   for (const v of props.values ?? []) {
-    values[v.tag] = { unit: v.unit, decimals: v.decimals, keep: v.keep, ...(v.pinned === undefined ? {} : { default: v.pinned }) }
+    values[v.tag] = { unit: v.unit, decimals: v.decimals, keep: v.keep, ...(v.pinned === undefined ? {} : { default: v.pinned }), ...(v.pad ? { pad: v.pad } : {}) }
   }
   if (spec) values[tag] = spec
   else delete values[tag]
@@ -263,8 +263,14 @@ async function saveValues(tag: string, spec: ValueSpec | null) {
 function confirmUnit() {
   const u = unitSheet.value
   if (!u || !u.unit.trim() || u.unit.includes(':')) return
-  const pinned = specOf.value.get(u.tag)?.pinned
-  saveValues(u.tag, { unit: u.unit.trim(), decimals: u.decimals, keep: u.keep, ...(pinned === undefined ? {} : { default: pinned }) })
+  const kept = specOf.value.get(u.tag)
+  saveValues(u.tag, {
+    unit: u.unit.trim(),
+    decimals: u.decimals,
+    keep: u.keep,
+    ...(kept?.pinned === undefined ? {} : { default: kept.pinned }),
+    ...(kept?.pad ? { pad: kept.pad } : {}),
+  })
   unitSheet.value = null
 }
 

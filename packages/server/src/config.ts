@@ -3,13 +3,14 @@ import { z } from 'zod'
 
 const statusSchema = z.enum(['good', 'pending', 'warning', 'danger'])
 
-const hourSchema = z.number().int().min(0).max(24)
+/** Minutes after local midnight; 1440 is the end of the day. */
+const minuteOfDaySchema = z.number().int().min(0).max(1440)
 
 const filterSchema = z.discriminatedUnion('kind', [
   /** `has`: carries any of the tags; `all`: carries every one; `not`: carries none of them. */
   z.object({ kind: z.literal('tag'), op: z.enum(['has', 'all', 'not']), tags: z.array(z.string().min(1)).min(1) }),
-  /** Local hours; `from` after `to` wraps past midnight. */
-  z.object({ kind: z.literal('time'), from: hourSchema, to: hourSchema }),
+  /** Local time of day; `from` after `to` wraps past midnight. */
+  z.object({ kind: z.literal('time'), from: minuteOfDaySchema, to: minuteOfDaySchema }),
   z.object({ kind: z.literal('weekday'), is: z.enum(['weekday', 'weekend']) }),
 ])
 
@@ -98,12 +99,16 @@ export const tagGroupsSchema = z
     return new Set(labels).size === labels.length
   }, { message: 'a tag can only be in one group' })
 
+/** Keypad rows that replace the usual amounts for one kind of number; the web app holds their components. */
+export const PAD_ROWS = ['weight'] as const
+
 /** A number a tag carries in a root's events: `sum` values add up over a day, `latest` ones replace each other. */
 export const valueSpecSchema = z.object({
   unit: z.string().trim().min(1).regex(/^[^:]+$/),
   decimals: z.number().int().min(0).max(3),
   keep: z.enum(['sum', 'latest']),
   default: z.number().min(0).optional(),
+  pad: z.enum(PAD_ROWS).optional(),
 })
 
 /** `values`: which tags carry a number when they appear alongside this root, keyed by tag. */

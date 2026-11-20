@@ -9,7 +9,7 @@ import Phrase from './Phrase.vue'
 import RuleBlock from './RuleBlock.vue'
 import SwitchRow from './SwitchRow.vue'
 import Tok from './Tok.vue'
-import { hour } from './words.ts'
+import { timeOfDay } from './words.ts'
 
 const props = defineProps<{ tab: Tab }>()
 const { data, draft, picker, findOf } = useRules()
@@ -95,8 +95,8 @@ const openTags = (at: RowPath, row: Extract<Filter, { kind: 'tag' }>) => (picker
             </template>
           </template>
           <Phrase v-else-if="r.entry.row?.kind === 'time'" :text="t('rules.row.time')">
-            <template #from><Tok @click="picker = { kind: 'hour', tab, at: r.entry.at!, field: 'from' }">{{ hour(r.entry.row.from) }}</Tok></template>
-            <template #to><Tok @click="picker = { kind: 'hour', tab, at: r.entry.at!, field: 'to' }">{{ hour(r.entry.row.to) }}</Tok></template>
+            <template #from><Tok @click="picker = { kind: 'clock', tab, at: r.entry.at!, field: 'from' }">{{ timeOfDay(r.entry.row.from) }}</Tok></template>
+            <template #to><Tok @click="picker = { kind: 'clock', tab, at: r.entry.at!, field: 'to' }">{{ timeOfDay(r.entry.row.to) }}</Tok></template>
           </Phrase>
           <Phrase v-else-if="r.entry.row?.kind === 'weekday'" :text="t('rules.row.weekday')">
             <template #is><Tok @click="picker = { kind: 'weekday', tab, at: r.entry.at! }">{{ t(`rules.${r.entry.row.is}`) }}</Tok></template>

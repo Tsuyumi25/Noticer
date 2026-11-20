@@ -1,7 +1,8 @@
+import type { PAD_ROWS } from 'server/config'
 import type { Component } from 'vue'
 import WeightSteps from './weight/WeightSteps.vue'
 
-/** Cards whose keypad swaps the usual-amount row for a row of their own, keyed by card id. */
-export const PAD_ROWS: Record<string, Component> = {
+/** The component behind each keypad row a value setting can name in `pad`. */
+export const PAD_ROW_COMPONENTS: Record<(typeof PAD_ROWS)[number], Component> = {
   weight: WeightSteps,
 }

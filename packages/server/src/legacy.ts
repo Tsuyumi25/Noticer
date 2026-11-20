@@ -154,7 +154,7 @@ export function convertLegacyConfig(raw: unknown): RawConfig {
 
 /** Number facts the old app kept per card; `root` puts the value on the card's root tag, `tag` on the one other tag the record carries. */
 const LEGACY_NUMBERS: Record<string, { spec: ValueSpec; on: 'root' | 'tag' }> = {
-  weight_kg: { spec: { unit: 'kg', decimals: 1, keep: 'latest' }, on: 'root' },
+  weight_kg: { spec: { unit: 'kg', decimals: 1, keep: 'latest', pad: 'weight' }, on: 'root' },
   duration_min: { spec: { unit: '分鐘', decimals: 0, keep: 'sum' }, on: 'tag' },
 }
 /** Amounts the old app could only store in tag names. */

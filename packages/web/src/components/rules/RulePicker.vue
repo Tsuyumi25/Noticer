@@ -11,7 +11,7 @@ import { amount, clock, elapsed, measureLabel, statusWord } from './words.ts'
 
 const { data, draft, tab, picker, findOf, counted, gaps, trial, days, closePicker: close } = useRules()
 const p = computed(() => picker.value!)
-const FIND_KINDS = new Set(['add', 'tags', 'hour', 'weekday'])
+const FIND_KINDS = new Set(['add', 'tags', 'clock', 'weekday'])
 
 const H = 3600
 const DAY = 86400
@@ -175,7 +175,8 @@ const amountPad = computed(() => {
   const want: Partial<Record<AmountField, number>> = back.want.kind === 'off' ? {} : back.want
   const decimals = 'unit' in m ? (data.units.find((u) => u.unit === m.unit)?.decimals ?? 0) : 0
   const unit = 'unit' in m ? m.unit : m.kind === 'since' ? t('time.unit.day') : t('rules.timesUnit')
-  return { field, unit, decimals, value: want[field] ?? null, min: field === 'red' ? (want.n ?? 0) : -1 }
+  const title = t(field === 'red' ? 'rules.pick.red' : field === 'hi' || back.want.kind === 'atMost' ? 'rules.pick.atMost' : 'rules.pick.atLeast')
+  return { field, title, unit, decimals, value: want[field] ?? null, min: field === 'red' ? (want.n ?? 0) : -1 }
 })
 /** Tidy amounts near what the last four weeks actually reached. */
 const amountCandidates = computed(() => {
@@ -252,7 +253,7 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
         <ValuePad
           v-if="amountPad"
           class="border-t-0"
-          :label="fieldTitle(amountPad.field)"
+          :label="amountPad.title"
           :unit="amountPad.unit"
           :decimals="amountPad.decimals"
           :value="amountPad.value"

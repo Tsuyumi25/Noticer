@@ -17,7 +17,10 @@ export type ValueInput = Omit<ValueSpec, 'default'> & {
   default: number | null
   /** Values worth one tap: this tag's own frequent ones first, then other tags' in the same unit. */
   candidates: number[]
-  /** The default is seldom sent as is, so the sheet opens the keypad for it right away. */
+  /**
+   * Only for the card's own tags, which are in the event from the start: open the keypad at once
+   * when the default went out unchanged less often than it was changed.
+   */
   open: boolean
 }
 
@@ -78,7 +81,7 @@ export function cardInputs(db: DB, config: Config, card: CardConfig): CardInputs
       auto: auto.has(tag),
       default: fallback,
       candidates,
-      open: own.length === 0 || keptShare(spec, own, fallback) < 0.5,
+      open: auto.has(tag) && (own.length === 0 || keptShare(spec, own, fallback) < 0.5),
     }
   })
   const choices = (card.facts ?? []).map((key) => ({ ...config.factInputs[key]!, key }))
