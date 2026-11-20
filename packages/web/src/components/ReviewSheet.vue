@@ -7,14 +7,17 @@ import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
 import { dayKey } from '../time.ts'
+import SleepAnalysis from '../plugins/sleep/SleepAnalysis.vue'
 import DayEventsSheet from './DayEventsSheet.vue'
 
-const props = defineProps<{ cardId: string }>()
+/** `sleep`: the card is half of the sleep pair, so the sheet opens on the rhythm analysis with the months beside it. */
+const props = defineProps<{ cardId: string; sleep?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
 const { sheet, sheetStyle, backdrop, animated, leave, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } = useSheetDrag({
   onRequestClose: () => leave(),
-  canDrag: () => selected.value === null,
+  // The rhythm chart scrolls sideways; a pull starting on it stays a scroll.
+  canDrag: (e) => selected.value === null && !(e.target as Element).closest('[data-hscroll]'),
 })
 
 const { data, isPending, isError } = useQuery({
@@ -68,6 +71,8 @@ function show(value: CalendarDay['value']): string {
 const showDelta = (d: number) => `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d).toFixed(data.value?.card.decimals ?? 0)}`
 
 const selected = ref<string | null>(null)
+const picked = ref<'analysis' | 'calendar' | null>(null)
+const tab = computed(() => picked.value ?? (props.sleep ? 'analysis' : 'calendar'))
 
 function onTransitionEnd(e: TransitionEvent) {
   if (isLeaveEnd(e)) emit('close')
@@ -102,9 +107,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </button>
           <h2 v-if="data" class="text-lg font-semibold">{{ data.card.emoji }} {{ data.card.name }}</h2>
         </header>
+        <div v-if="sleep" class="tabs mx-3 mb-1 shrink-0">
+          <button :class="{ on: tab === 'analysis' }" @click="picked = 'analysis'">{{ t('sleep.analysis') }}</button>
+          <button :class="{ on: tab === 'calendar' }" @click="picked = 'calendar'">{{ t('sleep.calendar') }}</button>
+        </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <p v-if="isPending" class="p-6 text-center text-zinc-400">{{ t('common.loading') }}</p>
+          <SleepAnalysis v-if="tab === 'analysis'" class="mx-auto max-w-2xl" />
+          <p v-else-if="isPending" class="p-6 text-center text-zinc-400">{{ t('common.loading') }}</p>
           <p v-else-if="isError" class="p-6 text-center text-red-600">{{ t('common.loadFailed') }}</p>
           <div v-else class="mx-auto flex max-w-2xl flex-col gap-6 px-3 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
             <section v-for="month in months" :key="month.key">
@@ -180,5 +190,25 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 .today {
   box-shadow: inset 0 0 0 2px #4f46e5;
+}
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #f4f4f5;
+}
+.tabs button {
+  min-height: 40px;
+  border-radius: 9px;
+  color: #52525b;
+  font-weight: 500;
+}
+.tabs button.on {
+  background: white;
+  color: #18181b;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
 }
 </style>

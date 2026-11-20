@@ -63,7 +63,13 @@ function closeReview() {
     </template>
   </main>
   <CheckinSheet v-if="opened" :key="opened.name" :card="opened" @close="opened = null" />
-  <ReviewSheet v-if="reviewing" :key="reviewing" :card-id="reviewing" @close="closeReview" />
+  <ReviewSheet
+    v-if="reviewing"
+    :key="reviewing"
+    :card-id="reviewing"
+    :sleep="reviewing === data?.sleep?.sleepCard.id || reviewing === data?.sleep?.wakeCard.id"
+    @close="closeReview"
+  />
   </div>
 </template>
 

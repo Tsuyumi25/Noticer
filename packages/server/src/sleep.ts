@@ -8,8 +8,9 @@ const AWAKE = { good: 8, pending: 11, warning: 16 }
 const ASLEEP = { warning: 6, good: 7, tooLong: 10 }
 const STALE_HOURS = { awake: 30, asleep: 20 }
 const MAX_BLOCK_HOURS = 20
-const MAIN_SLEEP_HOURS = 4
 const NEXT_SLEEP = { minWake: 8, maxWake: 30, halfLifeDays: 28, minSamples: 5 }
+
+export const MAIN_SLEEP_HOURS = 4
 
 export interface SleepPair {
   state: 'awake' | 'asleep' | 'unknown'
@@ -21,13 +22,18 @@ export interface SleepPair {
   predictedSleepAt: number | null
 }
 
-interface Block {
+export interface SleepBlock {
   onset: number
   offset: number
 }
 
-function blocksOf(events: EventRecord[]): Block[] {
-  const blocks: Block[] = []
+export function sleepEvents(events: EventRecord[], now: number): EventRecord[] {
+  return events.filter((e) => (e.cardId === SLEEP_CARD || e.cardId === WAKE_CARD) && e.eventAt <= now)
+}
+
+/** Pairs each sleep start with the wake that follows it; `events` must be the sleep/wake log alone. */
+export function blocksOf(events: EventRecord[]): SleepBlock[] {
+  const blocks: SleepBlock[] = []
   for (let i = 0; i < events.length - 1; i++) {
     const a = events[i]!
     const b = events[i + 1]!
@@ -39,7 +45,7 @@ function blocksOf(events: EventRecord[]): Block[] {
 }
 
 /** Recency-weighted median of past wake spans longer than the hours already awake. */
-function predictSleep(blocks: Block[], now: number): number | null {
+export function predictSleep(blocks: SleepBlock[], now: number): number | null {
   const main = blocks.filter((b) => b.offset - b.onset >= MAIN_SLEEP_HOURS * 3600 && b.offset <= now)
   const last = main[main.length - 1]
   if (!last) return null
@@ -58,15 +64,15 @@ function predictSleep(blocks: Block[], now: number): number | null {
 }
 
 export function evaluateSleep(events: EventRecord[], now: number): SleepPair {
-  const sleepEvents = events.filter((e) => (e.cardId === SLEEP_CARD || e.cardId === WAKE_CARD) && e.eventAt <= now)
-  const last = sleepEvents[sleepEvents.length - 1]
+  const log = sleepEvents(events, now)
+  const last = log[log.length - 1]
   const unknown: SleepPair = { state: 'unknown', hours: null, status: 'unknown', progress: 0, maxHours: null, lastSleepHours: null, predictedSleepAt: null }
   if (!last) return unknown
 
   const hours = (now - last.eventAt) / 3600
   if (last.cardId === WAKE_CARD) {
     if (hours > STALE_HOURS.awake) return { ...unknown, hours }
-    const prev = sleepEvents[sleepEvents.length - 2]
+    const prev = log[log.length - 2]
     const lastSleepHours = prev?.cardId === SLEEP_CARD ? (last.eventAt - prev.eventAt) / 3600 : null
     const status = hours < AWAKE.good ? 'good' : hours < AWAKE.pending ? 'pending' : hours < AWAKE.warning ? 'warning' : 'danger'
     return {
@@ -76,7 +82,7 @@ export function evaluateSleep(events: EventRecord[], now: number): SleepPair {
       progress: Math.max(0, ((AWAKE.warning - hours) / AWAKE.warning) * 100),
       maxHours: AWAKE.warning,
       lastSleepHours,
-      predictedSleepAt: predictSleep(blocksOf(sleepEvents), now),
+      predictedSleepAt: predictSleep(blocksOf(log), now),
     }
   }
   if (hours > STALE_HOURS.asleep) return { ...unknown, hours }

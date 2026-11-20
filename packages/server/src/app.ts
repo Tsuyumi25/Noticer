@@ -8,7 +8,8 @@ import type { DB } from './db.ts'
 import { listEvents } from './events.ts'
 import { cardInputs, readFacts } from './facts.ts'
 import { cardCalendar, reportCounts } from './review.ts'
-import { SLEEP_CARD, WAKE_CARD } from './sleep.ts'
+import { analyzeSleep } from './sleep-analysis.ts'
+import { blocksOf, sleepEvents, SLEEP_CARD, WAKE_CARD } from './sleep.ts'
 import { cardRoot, cardTags } from './tags.ts'
 
 type Env = { Variables: { db: DB; store: ConfigStore } }
@@ -21,6 +22,11 @@ const rangeQuery = z
   .refine((q) => q.from < q.to, { message: 'from must be before to' })
 
 const dashboardQuery = z.object({ at: z.coerce.number().int().optional() })
+
+const sleepAnalysisQuery = z.object({
+  days: z.coerce.number().int().min(30).max(730).default(365),
+  at: z.coerce.number().int().optional(),
+})
 
 // A backdated checkin keeps created_at at submit time and moves event_at by a non-positive offset.
 const checkinBody = z.object({
@@ -56,6 +62,12 @@ const api = new Hono<Env>()
   .get('/dashboard', zValidator('query', dashboardQuery), (c) => {
     const now = c.req.valid('query').at ?? Math.floor(Date.now() / 1000)
     return c.json(buildDashboard(c.var.store.read(), listEvents(c.var.db, 0, now + 1), now))
+  })
+  .get('/sleep/analysis', zValidator('query', sleepAnalysisQuery), (c) => {
+    const { days, at } = c.req.valid('query')
+    const now = at ?? Math.floor(Date.now() / 1000)
+    const events = listEvents(c.var.db, now - days * 86400, now + 1)
+    return c.json(analyzeSleep(blocksOf(sleepEvents(events, now)), now))
   })
   .post('/checkin', zValidator('json', checkinBody), (c) => {
     const { cardId, note, tags, timeOffset = 0, facts = {} } = c.req.valid('json')
