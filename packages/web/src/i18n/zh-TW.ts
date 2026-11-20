@@ -47,6 +47,10 @@ export default {
   'sheet.missing': '先填{names}才能送出',
   'sheet.submit': '送出',
   'sheet.submitFailed': '送出失敗（{status}）',
+  'sheet.save': '儲存',
+  'sheet.delete': '刪除',
+  'sheet.deleteTitle': '刪除這筆紀錄？',
+  'sheet.deleteFailed': '刪除失敗（{status}）',
   'sheet.discardLabel': '捨棄草稿',
   'sheet.discardTitle': '捨棄這份草稿？',
   'sheet.discardBody': '寫到一半的內容會消失',
@@ -126,7 +130,10 @@ export default {
   'journal.prevDay': '前一天',
   'journal.nextDay': '後一天',
   'journal.empty': '這天沒有紀錄',
-  'journal.backdated': '補記',
+  'journal.backdated': '補',
+  'journal.calendar': '月曆',
+  'journal.prevMonth': '上個月',
+  'journal.nextMonth': '下個月',
 
   'review.dayEmpty': '這天沒有紀錄',
 

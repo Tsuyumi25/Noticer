@@ -48,6 +48,10 @@ export default {
   'sheet.missing': 'Fill in {names} to save',
   'sheet.submit': 'Save',
   'sheet.submitFailed': "Couldn't save ({status})",
+  'sheet.save': 'Save',
+  'sheet.delete': 'Delete',
+  'sheet.deleteTitle': 'Delete this entry?',
+  'sheet.deleteFailed': "Couldn't delete ({status})",
   'sheet.discardLabel': 'Discard draft',
   'sheet.discardTitle': 'Discard this draft?',
   'sheet.discardBody': "What you've entered will be lost",
@@ -127,7 +131,10 @@ export default {
   'journal.prevDay': 'Previous day',
   'journal.nextDay': 'Next day',
   'journal.empty': 'Nothing recorded this day',
-  'journal.backdated': 'Backdated',
+  'journal.backdated': 'Late',
+  'journal.calendar': 'Calendar',
+  'journal.prevMonth': 'Previous month',
+  'journal.nextMonth': 'Next month',
 
   'review.dayEmpty': 'Nothing recorded this day',
 

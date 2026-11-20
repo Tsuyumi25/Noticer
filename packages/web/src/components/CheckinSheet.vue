@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ChevronRight, Clock, Pencil } from 'lucide-vue-next'
+import { ChevronRight, Clock, Pencil, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
@@ -17,19 +17,30 @@ export interface SheetCard {
   emoji: string
 }
 
-const props = defineProps<{ card: SheetCard }>()
+/** A recorded event to edit instead of a new checkin. */
+export interface SheetEvent {
+  id: number
+  eventAt: number
+  note: string | null
+  tags: string[]
+  facts: Record<string, string | number | boolean>
+}
+
+const props = defineProps<{ card: SheetCard; event?: SheetEvent }>()
 const emit = defineEmits<{ close: [] }>()
 
-const note = ref('')
+const initialNote = props.event?.note ?? ''
+const note = ref(initialNote)
 /** Null until the picker loads this card's preselected tags. */
-const tags = ref<string[] | null>(null)
-let initialTags: string | null = null
+const tags = ref<string[] | null>(props.event ? [...props.event.tags] : null)
+let initialTags: string | null = props.event ? [...props.event.tags].sort().join('\n') : null
 function onTags(next: string[]) {
   if (tags.value === null) initialTags = [...next].sort().join('\n')
   tags.value = next
 }
 /** When it happened, in ms; null means now. */
-const happenedAt = ref<number | null>(null)
+const initialHappenedAt = props.event ? props.event.eventAt * 1000 : null
+const happenedAt = ref<number | null>(initialHappenedAt)
 const timePopup = ref(false)
 const timeLabel = computed(() => {
   if (happenedAt.value === null) return t('time.now')
@@ -52,14 +63,23 @@ const amounts = ref<Record<string, number | null>>({})
 /** The tag whose number the keypad is setting. */
 const pad = ref<string | null>(null)
 let initialAmounts = ''
+let initialChoices = ''
 watch(
   inputs,
   (list) => {
     if (!list || choices.value !== null) return
-    choices.value = Object.fromEntries(list.choices.map((i) => [i.key, null]))
-    for (const v of list.values) if (v.auto || tags.value?.includes(v.tag)) amounts.value[v.tag] = v.default
+    const recorded = props.event?.facts ?? {}
+    choices.value = Object.fromEntries(list.choices.map((i) => [i.key, typeof recorded[i.key] === 'string' ? (recorded[i.key] as string) : null]))
+    for (const v of list.values) {
+      if (props.event) {
+        const value = recorded[`${v.tag}:${v.unit}`]
+        if (typeof value === 'number') amounts.value[v.tag] = value
+        else if (v.auto || tags.value?.includes(v.tag)) amounts.value[v.tag] = null
+      } else if (v.auto || tags.value?.includes(v.tag)) amounts.value[v.tag] = v.default
+    }
     initialAmounts = JSON.stringify(amounts.value)
-    pad.value = list.values.find((v) => v.auto && v.open)?.tag ?? null
+    initialChoices = JSON.stringify(choices.value)
+    if (!props.event) pad.value = list.values.find((v) => v.auto && v.open)?.tag ?? null
   },
   { immediate: true },
 )
@@ -96,10 +116,10 @@ function pick(key: string, value: string) {
 
 const dirty = computed(
   () =>
-    note.value.trim() !== '' ||
-    happenedAt.value !== null ||
+    note.value.trim() !== initialNote.trim() ||
+    happenedAt.value !== initialHappenedAt ||
     (tags.value !== null && [...tags.value].sort().join('\n') !== initialTags) ||
-    (choices.value !== null && Object.values(choices.value).some((v) => v !== null)) ||
+    (choices.value !== null && JSON.stringify(choices.value) !== initialChoices) ||
     JSON.stringify(amounts.value) !== initialAmounts,
 )
 
@@ -107,31 +127,50 @@ const editing = ref(false)
 const picker = ref<InstanceType<typeof TagPicker> | null>(null)
 
 const queryClient = useQueryClient()
+function refresh() {
+  queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+  queryClient.invalidateQueries({ queryKey: ['events'] })
+  queryClient.invalidateQueries({ queryKey: ['cardTags'] })
+  queryClient.invalidateQueries({ queryKey: ['cardInputs'] })
+  leave()
+}
 const submit = useMutation({
   mutationFn: async () => {
-    const timeOffset = happenedAt.value === null ? 0 : Math.min(0, Math.round((happenedAt.value - Date.now()) / 1000))
     const facts: Record<string, number | string> = {}
     for (const [key, v] of Object.entries(choices.value ?? {})) if (v !== null) facts[key] = v
     for (const [tag, v] of Object.entries(amounts.value)) if (v !== null) facts[`${tag}:${specOf.value.get(tag)!.unit}`] = v
-    const res = await api.checkin.$post({ json: { cardId: props.card.id, note: note.value, tags: tags.value ?? [], timeOffset, facts } })
+    const json = { note: note.value, tags: tags.value ?? [], facts }
+    const res = props.event
+      ? await api.events[':id'].$put({
+          param: { id: String(props.event.id) },
+          json: { ...json, eventAt: Math.floor((happenedAt.value ?? Date.now()) / 1000) },
+        })
+      : await api.checkin.$post({
+          json: { ...json, cardId: props.card.id, timeOffset: happenedAt.value === null ? 0 : Math.min(0, Math.round((happenedAt.value - Date.now()) / 1000)) },
+        })
     if (!res.ok) throw new Error(t('sheet.submitFailed', { status: res.status }))
   },
+  onSuccess: refresh,
+})
+const remove = useMutation({
+  mutationFn: async () => {
+    const res = await api.events[':id'].$delete({ param: { id: String(props.event!.id) } })
+    if (!res.ok) throw new Error(t('sheet.deleteFailed', { status: res.status }))
+  },
   onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-    queryClient.invalidateQueries({ queryKey: ['events'] })
-    queryClient.invalidateQueries({ queryKey: ['cardTags'] })
-    queryClient.invalidateQueries({ queryKey: ['cardInputs'] })
-    leave()
+    deleting.value = false
+    refresh()
   },
 })
 
 const confirming = ref(false)
+const deleting = ref(false)
 
 const { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } =
   useSheetDrag({
     onRequestClose: requestClose,
     // While editing, a press on a tag may become a drag; it must not pull the sheet.
-    canDrag: (e) => !confirming.value && !(editing.value && (e.target as Element).closest('[data-tag]')),
+    canDrag: (e) => !confirming.value && !deleting.value && !(editing.value && (e.target as Element).closest('[data-tag]')),
   })
 
 function requestClose() {
@@ -155,6 +194,7 @@ function onKeydown(e: KeyboardEvent) {
   if (timePopup.value) timePopup.value = false
   else if (pad.value) pad.value = null
   else if (confirming.value) confirming.value = false
+  else if (deleting.value) deleting.value = false
   else requestClose()
 }
 
@@ -192,8 +232,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             class="mb-1 flex min-h-12 w-full items-center justify-between rounded-xl border border-zinc-200 px-3"
             @click="timePopup = true"
           >
-            <span class="flex items-center gap-2"><Clock :size="18" class="text-zinc-400" />{{ t('sheet.time') }}</span>
-            <span class="flex items-center gap-1" :class="happenedAt === null ? 'text-zinc-500' : 'font-semibold text-amber-700'">
+            <span class="flex shrink-0 items-center gap-2 whitespace-nowrap"><Clock :size="18" class="text-zinc-400" />{{ t('sheet.time') }}</span>
+            <span class="flex min-w-0 items-center gap-1 pl-2 text-right" :class="happenedAt === null ? 'text-zinc-500' : 'font-semibold text-amber-700'">
               {{ timeLabel }}<ChevronRight :size="18" class="text-zinc-400" />
             </span>
           </button>
@@ -268,14 +308,22 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               {{ t('sheet.missing', { names: new Intl.ListFormat(locale).format(missing) }) }}
             </p>
             <p v-else-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
-            <div class="grid grid-cols-2 gap-3">
-              <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
+            <div class="flex gap-3">
               <button
-                class="h-12 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
+                v-if="event"
+                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600"
+                :aria-label="t('sheet.delete')"
+                @click="deleting = true"
+              >
+                <Trash2 :size="20" />
+              </button>
+              <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
+              <button
+                class="h-12 flex-1 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
                 :disabled="choices === null || missing.length > 0 || submit.isPending.value || leaving"
                 @click="submit.mutate()"
               >
-                {{ t('sheet.submit') }}
+                {{ t(event ? 'sheet.save' : 'sheet.submit') }}
               </button>
             </div>
           </template>
@@ -293,6 +341,20 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <p class="mb-4 text-center text-sm text-zinc-500">{{ t('sheet.discardBody') }}</p>
           <button class="mb-2 h-12 w-full rounded-xl bg-red-500 font-semibold text-white" @click="discard">{{ t('sheet.discard') }}</button>
           <button class="h-12 w-full rounded-xl bg-zinc-100 font-semibold" @click="confirming = false">{{ t('sheet.keepEditing') }}</button>
+        </div>
+      </div>
+      <div v-if="deleting" class="absolute inset-0 flex items-end bg-black/40" @click.self="deleting = false">
+        <div role="alertdialog" :aria-label="t('sheet.deleteTitle')" class="w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <p class="mb-4 text-center font-semibold">{{ t('sheet.deleteTitle') }}</p>
+          <p v-if="remove.error.value" class="mb-2 text-center text-sm text-red-600">{{ remove.error.value.message }}</p>
+          <button
+            class="mb-2 h-12 w-full rounded-xl bg-red-500 font-semibold text-white disabled:opacity-40"
+            :disabled="remove.isPending.value"
+            @click="remove.mutate()"
+          >
+            {{ t('sheet.delete') }}
+          </button>
+          <button class="h-12 w-full rounded-xl bg-zinc-100 font-semibold" @click="deleting = false">{{ t('common.cancel') }}</button>
         </div>
       </div>
     </div>

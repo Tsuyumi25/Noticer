@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ionic/core": "^9.0.13",
     "@tanstack/vue-query": "^5.107.1",
     "hono": "^4.13.19",
     "lucide-vue-next": "^1.0.0",

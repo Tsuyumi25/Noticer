@@ -7,6 +7,7 @@ import Sortable from 'sortablejs'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { api } from '../api.ts'
 import { t } from '../i18n/index.ts'
+import { PALETTE } from '../tagColors.ts'
 
 const props = defineProps<{
   cardId: string
@@ -25,7 +26,6 @@ type TagGroup = CardTags['groups'][number]
 const UNGROUPED = '__ungrouped__'
 /** Menu container of the card's own tags, which only take a unit. */
 const AUTO = '__auto__'
-const PALETTE = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#ef4444', '#14b8a6', '#84cc16']
 
 const queryClient = useQueryClient()
 const { data } = useQuery({

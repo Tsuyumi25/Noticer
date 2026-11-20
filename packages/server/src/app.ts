@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { checkinTags, createCheckin } from './checkin.ts'
+import { checkinTags, createCheckin, deleteCheckin, findEvent, updateCheckin } from './checkin.ts'
 import { rootUnits, rulesSchema, tagGroupsSchema, valueSpecSchema, type ConfigStore } from './config.ts'
 import { buildDashboard } from './dashboard.ts'
 import type { DB } from './db.ts'
@@ -31,6 +31,16 @@ const checkinBody = z.object({
   facts: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
 })
 
+// An edited event keeps its created_at; the new time can be anywhere up to now.
+const eventBody = z.object({
+  note: z.string(),
+  tags: z.array(z.string()),
+  eventAt: z.number().int(),
+  facts: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
+})
+
+const eventParam = z.object({ id: z.coerce.number().int() })
+
 const tagGroupsBody = z.object({ groups: tagGroupsSchema })
 
 const tagValuesBody = z.object({ values: z.record(z.string(), valueSpecSchema) })
@@ -59,6 +69,26 @@ const api = new Hono<Env>()
     const id = createCheckin(c.var.db, card, { note: trimmed === '' ? null : trimmed, picked: tags, facts: read.rows, now, timeOffset })
     return c.json({ id }, 201)
   })
+  .put('/events/:id', zValidator('param', eventParam), zValidator('json', eventBody), (c) => {
+    const { id } = c.req.valid('param')
+    const { note, tags, eventAt, facts = {} } = c.req.valid('json')
+    const stored = findEvent(c.var.db, id)
+    if (!stored) return c.json({ error: `unknown event ${id}` }, 404)
+    const config = c.var.store.read()
+    const card = config.cards.find((k) => k.id === stored.cardId)
+    if (!card) return c.json({ error: `unknown card ${stored.cardId}` }, 404)
+    if (eventAt > Math.floor(Date.now() / 1000)) return c.json({ error: 'eventAt is in the future' }, 400)
+    const read = readFacts(config, card, facts, checkinTags(card, tags))
+    if (!read.ok) return c.json({ error: read.error }, read.status)
+    const trimmed = note.trim()
+    updateCheckin(c.var.db, id, card, { note: trimmed === '' ? null : trimmed, picked: tags, facts: read.rows, timeOffset: eventAt - stored.createdAt })
+    return c.body(null, 204)
+  })
+  .delete('/events/:id', zValidator('param', eventParam), (c) => {
+    if (!deleteCheckin(c.var.db, c.req.valid('param').id)) return c.json({ error: 'unknown event' }, 404)
+    return c.body(null, 204)
+  })
+  .get('/config', (c) => c.json(c.var.store.read()))
   .get('/cards/:cardId/tags', (c) => {
     const config = c.var.store.read()
     const card = config.cards.find((k) => k.id === c.req.param('cardId'))

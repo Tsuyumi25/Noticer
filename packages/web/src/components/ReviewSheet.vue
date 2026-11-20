@@ -6,6 +6,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
+import { dayKey } from '../time.ts'
 import DayEventsSheet from './DayEventsSheet.vue'
 
 const props = defineProps<{ cardId: string }>()
@@ -25,7 +26,7 @@ const { data, isPending, isError } = useQuery({
   },
 })
 
-const todayKey = new Date().toLocaleDateString('sv-SE')
+const todayKey = dayKey(new Date())
 
 // 2023-01-01 was a Sunday.
 const weekdays = computed(() =>

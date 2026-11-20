@@ -10,6 +10,9 @@ export function startOfDay(ms: number): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
 }
 
+/** A local calendar day as YYYY-MM-DD. */
+export const dayKey = (date: Date) => date.toLocaleDateString('sv-SE')
+
 const pad = (n: number) => String(n).padStart(2, '0')
 
 export const clock = (ms: number) => {

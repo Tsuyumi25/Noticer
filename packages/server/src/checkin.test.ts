@@ -71,6 +71,49 @@ describe('checkin', () => {
   })
 })
 
+describe('editing an event', () => {
+  async function recorded() {
+    const ctx = setup()
+    await ctx.send('POST', '/api/checkin', { cardId: 'practice', note: '早上', tags: ['鋼琴'], facts: { '鋼琴:分鐘': 20, mood_emoji: '🙂' } })
+    return { ...ctx, event: allEvents(ctx.db)[0]! }
+  }
+
+  it('replaces note, time, tags, values and choices, keeping the card tag and facts the app does not model', async () => {
+    const { db, send, event } = await recorded()
+    db.prepare("INSERT INTO checkin_facts (checkin_id, k, type, value) VALUES (?, 'mood_text', 'text', '有點睏')").run(event.id)
+    const eventAt = event.eventAt - 5 * 3600
+    const res = await send('PUT', `/api/events/${event.id}`, { note: ' ', tags: ['吉他'], eventAt, facts: { '吉他:分鐘': 15, mood_emoji: '🙂' } })
+    expect(res.status).toBe(204)
+    expect(allEvents(db)).toEqual([
+      expect.objectContaining({
+        id: event.id,
+        eventAt,
+        timeOffset: -5 * 3600,
+        note: null,
+        tags: ['練習', '吉他'],
+        facts: { '吉他:分鐘': 15, mood_emoji: '🙂', mood_text: '有點睏' },
+      }),
+    ])
+  })
+
+  it('refuses a future time, values of tags the event lacks, and unknown events, leaving the event as it was', async () => {
+    const { db, send, event } = await recorded()
+    const body = { note: '', tags: ['鋼琴'], eventAt: event.eventAt, facts: { mood_emoji: '🙂' } }
+    expect((await send('PUT', `/api/events/${event.id}`, { ...body, eventAt: event.eventAt + 3600 })).status).toBe(400)
+    expect((await send('PUT', `/api/events/${event.id}`, { ...body, facts: { '吉他:分鐘': 5, mood_emoji: '🙂' } })).status).toBe(400)
+    expect((await send('PUT', `/api/events/${event.id + 1}`, body)).status).toBe(404)
+    expect(allEvents(db)).toEqual([event])
+  })
+
+  it('deletes an event with its tags and values, once', async () => {
+    const { db, send, event } = await recorded()
+    expect((await send('DELETE', `/api/events/${event.id}`)).status).toBe(204)
+    expect((await send('DELETE', `/api/events/${event.id}`)).status).toBe(404)
+    expect(allEvents(db)).toEqual([])
+    expect(db.prepare('SELECT COUNT(*) AS n FROM checkin_facts').get()).toEqual({ n: 0 })
+  })
+})
+
 describe('values', () => {
   const post = (send: ReturnType<typeof setup>['send'], cardId: string, tags: string[], facts: Record<string, unknown>) =>
     send('POST', '/api/checkin', { cardId, note: '', tags, facts })

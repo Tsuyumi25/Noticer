@@ -48,6 +48,10 @@ export default {
   'sheet.missing': '{names}を入力すると送信できます',
   'sheet.submit': '送信',
   'sheet.submitFailed': '送信できませんでした（{status}）',
+  'sheet.save': '保存',
+  'sheet.delete': '削除',
+  'sheet.deleteTitle': 'この記録を削除しますか？',
+  'sheet.deleteFailed': '削除できませんでした（{status}）',
   'sheet.discardLabel': '下書きを破棄',
   'sheet.discardTitle': 'この下書きを破棄しますか？',
   'sheet.discardBody': '入力中の内容は失われます',
@@ -127,7 +131,10 @@ export default {
   'journal.prevDay': '前の日',
   'journal.nextDay': '次の日',
   'journal.empty': 'この日の記録はありません',
-  'journal.backdated': '後から記録',
+  'journal.backdated': '後記',
+  'journal.calendar': 'カレンダー',
+  'journal.prevMonth': '前の月',
+  'journal.nextMonth': '次の月',
 
   'review.dayEmpty': 'この日の記録はありません',
 
