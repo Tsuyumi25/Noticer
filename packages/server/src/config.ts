@@ -25,13 +25,16 @@ const findSchema = z.object({ match: matchSchema, blocks: z.array(blockSchema) }
 
 const secondsSchema = z.number().int().positive()
 
-const nowSchema = z.discriminatedUnion('kind', [
-  z
-    .object({ kind: z.literal('worry'), after: secondsSchema, panic: secondsSchema.optional() })
-    .refine((n) => n.panic === undefined || n.panic > n.after, { message: 'panic must come after after' }),
-  z.object({ kind: z.literal('soon'), within: secondsSchema }),
-  z.object({ kind: z.literal('off') }),
-])
+/** Seconds since the last counted record: before `soon` it is too soon; from `late.warn` a warning, from `late.danger` danger. */
+const nowSchema = z
+  .object({
+    soon: secondsSchema.optional(),
+    late: z
+      .object({ warn: secondsSchema, danger: secondsSchema })
+      .refine((l) => l.danger > l.warn, { message: 'danger must come after warn' })
+      .optional(),
+  })
+  .refine((n) => n.soon === undefined || n.late === undefined || n.soon < n.late.warn, { message: 'soon must end before warn' })
 
 const measureSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('times') }),

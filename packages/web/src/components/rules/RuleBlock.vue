@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 
-defineProps<{ label: string; icon: Component; tint: string }>()
+defineProps<{ label: string; icon?: Component; tint?: string }>()
 </script>
 
 <template>

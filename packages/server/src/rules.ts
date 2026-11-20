@@ -7,11 +7,19 @@ export type DailyState = RuleStatus | 'good-carry' | 'logged' | 'none'
 
 export interface NowResult {
   status: CardStatus
-  /** Water left, 0–100: a worry card drains toward its last threshold, a soon card fills toward its first. */
+  /** Which limit the water is measured against: `soon` until it passes, then `late`. */
+  mode: 'soon' | 'late' | null
+  /** Water left, 0–100: fills toward `soon`, then drains toward `late.danger`. */
   progress: number
   lastAt: number | null
   maxHours: number | null
 }
+
+const H = 3600
+/** The durations a threshold can take, in seconds. */
+export const DURATIONS = [1, 2, 3, 4, 6, 8, 12, 16, 20, 24, 36, 48, 72, 96, 120, 168, 240, 288, 336, 504, 720, 1080, 1440].map((h) => h * H)
+export const durationAfter = (seconds: number) => DURATIONS.find((d) => d > seconds) ?? seconds * 2
+export const durationBefore = (seconds: number) => DURATIONS.findLast((d) => d < seconds) ?? Math.ceil(seconds / 2)
 
 export interface DailyStrip {
   values: (number | null)[]
@@ -62,16 +70,17 @@ export function evaluateNow(rules: Rules, root: string, events: EventRecord[], n
       break
     }
   }
-  const rule = rules.now
-  if (rule.kind === 'off') return { status: 'unknown', progress: 0, lastAt, maxHours: null }
-  const limit = rule.kind === 'worry' ? (rule.panic ?? rule.after) : rule.within
-  if (lastAt === null) return { status: 'unknown', progress: 0, lastAt, maxHours: limit / 3600 }
+  const { soon, late } = rules.now
+  if (soon === undefined && late === undefined) return { status: 'unknown', mode: null, progress: 0, lastAt, maxHours: null }
+  if (lastAt === null) return { status: 'unknown', mode: late ? 'late' : 'soon', progress: 0, lastAt, maxHours: (late?.danger ?? soon!) / H }
   const elapsed = now - lastAt
-  if (rule.kind === 'soon') {
-    return { status: elapsed >= limit ? 'good' : 'pending', progress: Math.min(100, (elapsed / limit) * 100), lastAt, maxHours: limit / 3600 }
+  if (soon !== undefined && (elapsed < soon || late === undefined)) {
+    return { status: elapsed < soon ? 'pending' : 'good', mode: 'soon', progress: Math.min(100, (elapsed / soon) * 100), lastAt, maxHours: soon / H }
   }
-  const status = elapsed < rule.after ? 'good' : rule.panic !== undefined && elapsed < rule.panic ? 'warning' : 'danger'
-  return { status, progress: elapsed >= limit ? 0 : ((limit - elapsed) / limit) * 100, lastAt, maxHours: limit / 3600 }
+  const { warn, danger } = late!
+  const status = elapsed < warn ? 'good' : elapsed < danger ? 'warning' : 'danger'
+  const start = soon ?? 0
+  return { status, mode: 'late', progress: elapsed >= danger ? 0 : ((danger - elapsed) / (danger - start)) * 100, lastAt, maxHours: danger / H }
 }
 
 export function wantStatus(want: Exclude<Want, { kind: 'off' }>, value: number): RuleStatus {

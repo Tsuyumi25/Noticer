@@ -5,7 +5,7 @@ import { openDb, type DB } from './db.ts'
 import { listEvents } from './events.ts'
 import type { CardTags } from './tags.ts'
 
-const unjudged = { find: { match: 'all', blocks: [] }, now: { kind: 'off' }, back: null } as const
+const unjudged = { find: { match: 'all', blocks: [] }, now: {}, back: null } as const
 const config = {
   ...emptyConfig,
   cards: [

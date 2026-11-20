@@ -9,7 +9,7 @@ const ev = (eventAt: number, tags: string[], facts: EventRecord['facts'] = {}): 
   id: nextId++, cardId: 'x', eventAt, timeOffset: 0, note: null, tags, facts,
 })
 
-const unjudged: Rules = { find: { match: 'all', blocks: [] }, now: { kind: 'off' }, back: null }
+const unjudged: Rules = { find: { match: 'all', blocks: [] }, now: {}, back: null }
 const config: Config = {
   ...emptyConfig,
   cards: [

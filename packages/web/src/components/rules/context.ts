@@ -19,8 +19,8 @@ export type Picker =
   | { kind: 'hour'; tab: Tab; at: RowPath; field: 'from' | 'to' }
   | { kind: 'weekday'; tab: Tab; at: RowPath }
   | { kind: 'records'; tab: Tab }
-  | { kind: 'remind' | 'span' | 'measure' | 'want' }
-  | { kind: 'duration'; field: 'after' | 'panic' | 'within' }
+  | { kind: 'span' | 'measure' | 'want' }
+  | { kind: 'duration'; field: 'soon' | 'warn' | 'danger' }
   | { kind: 'amount'; field: 'n' | 'red' | 'lo' | 'hi' }
   | { kind: 'day'; index: number }
 
@@ -42,6 +42,13 @@ function createRules(data: RulesData) {
 
   const findOf = (rules: Rules, t: Tab): Find => (t === 'back' && rules.back?.find) || rules.find
   const counted = (find: Find) => data.events.filter((e) => matchesFind(find, data.root, e))
+  /** Gaps between counted records over the last 90 days, shortest first. */
+  const gaps = computed(() => {
+    const times = counted(draft.value.find)
+      .map((e) => e.eventAt)
+      .filter((at) => at >= data.now - 90 * 86400)
+    return times.slice(1).map((at, i) => at - times[i]!).sort((a, b) => a - b)
+  })
   const model = (rules: Rules) => cardModel({ ...data.card, rules }, data.events, data.now)
   const days = (rules: Rules) => evaluateDays(rules, data.root, data.events, data.now, PREVIEW_DAYS)
   const tally = (rules: Rules): [CountedState, number][] => {
@@ -66,7 +73,7 @@ function createRules(data: RulesData) {
     picker.value = null
   }
 
-  return { data, draft, tab, picker, dirty, findOf, counted, model, days, trial, tally, closePicker }
+  return { data, draft, tab, picker, dirty, findOf, counted, gaps, model, days, trial, tally, closePicker }
 }
 
 export type RulesContext = ReturnType<typeof createRules>
@@ -83,9 +90,3 @@ export function useRules(): RulesContext {
   if (!context) throw new Error('useRules needs provideRules above it')
   return context
 }
-
-const H = 3600
-/** Seconds. */
-export const DURATIONS = [1, 2, 3, 4, 6, 8, 12, 16, 20, 24, 36, 48, 72, 96, 120, 168, 240, 288, 336, 504, 720, 1080, 1440].map((h) => h * H)
-
-export const nextDuration = (after: number) => DURATIONS.find((d) => d > after) ?? after * 2

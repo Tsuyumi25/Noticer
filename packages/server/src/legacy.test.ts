@@ -51,7 +51,7 @@ describe('convertLegacyConfig', () => {
   it('reads a cooldown as "too soon" until its first ready stage, and gives looking back its own find', () => {
     expect(rules('coffee')).toEqual({
       find: { match: 'all', blocks: [] },
-      now: { kind: 'soon', within: 4 * 3600 },
+      now: { soon: 4 * 3600 },
       back: {
         span: 'day', measure: { kind: 'times' }, want: { kind: 'between', lo: 2, hi: 3 },
         find: { match: 'all', blocks: [{ ops: ['any'], layers: [[{ kind: 'tag', op: 'not', tags: ['試喝', '不算'] }]] }] },
@@ -70,10 +70,10 @@ describe('convertLegacyConfig', () => {
     })
   })
 
-  it('takes the last two deadline stages as worry and panic', () => {
-    expect(rules('skincare').now).toEqual({ kind: 'worry', after: D, panic: 1.5 * D })
-    expect(rules('ironing').now).toEqual({ kind: 'worry', after: 3 * D, panic: 5 * D })
-    expect(rules('sunscreen').now).toEqual({ kind: 'worry', after: 12 * 3600 })
+  it('takes the last two deadline stages as warn and danger, and warns one duration early before a lone one', () => {
+    expect(rules('skincare').now).toEqual({ late: { warn: D, danger: 1.5 * D } })
+    expect(rules('ironing').now).toEqual({ late: { warn: 3 * D, danger: 5 * D } })
+    expect(rules('sunscreen').now).toEqual({ late: { warn: 8 * 3600, danger: 12 * 3600 } })
   })
 
   it('turns intervals, period limits and binaries into looking-back wants', () => {
@@ -83,7 +83,7 @@ describe('convertLegacyConfig', () => {
   })
 
   it('leaves a card without trackers unjudged', () => {
-    expect(rules('weight')).toEqual({ find: { match: 'all', blocks: [] }, now: { kind: 'off' }, back: null })
+    expect(rules('weight')).toEqual({ find: { match: 'all', blocks: [] }, now: {}, back: null })
   })
 
   it('refuses a card whose tracker counts another root', () => {

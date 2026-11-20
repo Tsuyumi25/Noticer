@@ -63,47 +63,51 @@ describe('matchesFind', () => {
 })
 
 describe('evaluateNow', () => {
-  const worry: Rules = { find: all, now: { kind: 'worry', after: 6 * H, panic: 8 * H }, back: null }
+  const late: Rules = { find: all, now: { late: { warn: 6 * H, danger: 8 * H } }, back: null }
 
-  it('turns yellow after `after` and red after `panic`, draining toward the last threshold', () => {
+  it('warns from `warn` and is in danger from `danger`, draining toward danger', () => {
     const at = local(10)
     const events = [ev(at - 100 * H, ['澆花']), ev(at, ['澆花'])]
-    expect(evaluateNow(worry, '澆花', events, at + 2 * H)).toMatchObject({ status: 'good', progress: 75, maxHours: 8 })
-    expect(evaluateNow(worry, '澆花', events, at + 7 * H).status).toBe('warning')
-    expect(evaluateNow(worry, '澆花', events, at + 9 * H)).toMatchObject({ status: 'danger', progress: 0 })
-  })
-
-  it('goes straight to red without a panic threshold', () => {
-    const at = local(10)
-    const rules: Rules = { ...worry, now: { kind: 'worry', after: 6 * H } }
-    expect(evaluateNow(rules, '澆花', [ev(at, ['澆花'])], at + 7 * H).status).toBe('danger')
+    expect(evaluateNow(late, '澆花', events, at + 2 * H)).toMatchObject({ status: 'good', mode: 'late', progress: 75, maxHours: 8 })
+    expect(evaluateNow(late, '澆花', events, at + 6 * H).status).toBe('warning')
+    expect(evaluateNow(late, '澆花', events, at + 8 * H)).toMatchObject({ status: 'danger', progress: 0 })
   })
 
   it('stays pending inside a soon window and fills toward it', () => {
     const at = local(10)
-    const rules: Rules = { find: all, now: { kind: 'soon', within: 4 * H }, back: null }
-    expect(evaluateNow(rules, '喝咖啡', [ev(at, ['喝咖啡'])], at + 1 * H)).toMatchObject({ status: 'pending', progress: 25 })
+    const rules: Rules = { find: all, now: { soon: 4 * H }, back: null }
+    expect(evaluateNow(rules, '喝咖啡', [ev(at, ['喝咖啡'])], at + 1 * H)).toMatchObject({ status: 'pending', mode: 'soon', progress: 25 })
     expect(evaluateNow(rules, '喝咖啡', [ev(at, ['喝咖啡'])], at + 5 * H)).toMatchObject({ status: 'good', progress: 100 })
+  })
+
+  it('runs too soon, then good, warning and danger when both ends are set, with the water full where soon ends', () => {
+    const at = local(10)
+    const rules: Rules = { find: all, now: { soon: 4 * H, late: { warn: 8 * H, danger: 12 * H } }, back: null }
+    const at_ = (h: number) => evaluateNow(rules, '喝咖啡', [ev(at, ['喝咖啡'])], at + h * H)
+    expect(at_(2)).toMatchObject({ status: 'pending', mode: 'soon', progress: 50, maxHours: 4 })
+    expect(at_(4)).toMatchObject({ status: 'good', mode: 'late', progress: 100, maxHours: 12 })
+    expect(at_(10)).toMatchObject({ status: 'warning', progress: 25 })
+    expect(at_(12).status).toBe('danger')
   })
 
   it('takes the last counted event at or before now, however many newer ones only share the root', () => {
     const at = local(1)
     const events = [ev(at, ['喝咖啡', '加糖']), ...Array.from({ length: 300 }, (_, i) => ev(at + (i + 1) * H, ['喝咖啡']))]
-    const rules: Rules = { find: flat('all', has('加糖')), now: { kind: 'soon', within: 7 * 24 * H }, back: null }
+    const rules: Rules = { find: flat('all', has('加糖')), now: { soon: 7 * 24 * H }, back: null }
     expect(evaluateNow(rules, '喝咖啡', events, at + 400 * H).lastAt).toBe(at)
-    expect(evaluateNow(worry, '喝咖啡', events, at + 3 * H).lastAt).toBe(at + 3 * H)
+    expect(evaluateNow(late, '喝咖啡', events, at + 3 * H).lastAt).toBe(at + 3 * H)
   })
 
   it('is unknown without a counted event or without a reminder', () => {
-    expect(evaluateNow(worry, '澆花', [ev(local(10), ['喝咖啡'])], local(11))).toMatchObject({ status: 'unknown', progress: 0 })
-    const off: Rules = { find: all, now: { kind: 'off' }, back: null }
-    expect(evaluateNow(off, '澆花', [ev(local(10), ['澆花'])], local(11))).toMatchObject({ status: 'unknown', maxHours: null })
+    expect(evaluateNow(late, '澆花', [ev(local(10), ['喝咖啡'])], local(11))).toMatchObject({ status: 'unknown', progress: 0 })
+    const off: Rules = { find: all, now: {}, back: null }
+    expect(evaluateNow(off, '澆花', [ev(local(10), ['澆花'])], local(11))).toMatchObject({ status: 'unknown', mode: null, maxHours: null })
   })
 })
 
 describe('evaluateDays', () => {
   const now = local(20, 15)
-  const rules = (back: Rules['back'], find: Find = all): Rules => ({ find, now: { kind: 'off' }, back })
+  const rules = (back: Rules['back'], find: Find = all): Rules => ({ find, now: {}, back })
 
   it('counts per local day, oldest first, with no value before the first counted event', () => {
     const events = [ev(local(18, 0, 5), ['喝咖啡']), ev(local(18, 23, 55), ['喝咖啡']), ev(local(20, 9), ['喝咖啡'])]

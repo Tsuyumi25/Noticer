@@ -1,6 +1,6 @@
 import type { CardConfig, Config } from './config.ts'
 import type { EventRecord } from './events.ts'
-import { evaluateDays, evaluateNow, type CardStatus, type DailyStrip } from './rules.ts'
+import { evaluateDays, evaluateNow, type CardStatus, type DailyStrip, type NowResult } from './rules.ts'
 import { evaluateSleep, SLEEP_CARD, WAKE_CARD, type SleepPair } from './sleep.ts'
 import { cardRoot } from './tags.ts'
 
@@ -9,7 +9,7 @@ export interface CardModel {
   name: string
   emoji: string
   status: CardStatus
-  mode: 'worry' | 'soon' | null
+  mode: NowResult['mode']
   progress: number
   nowHours: number | null
   maxHours: number | null
@@ -39,15 +39,14 @@ function urgency(card: CardModel): number {
 export function cardModel(card: Pick<CardConfig, 'id' | 'tag' | 'bucket' | 'emoji' | 'rules'>, events: EventRecord[], now: number): CardModel {
   const root = cardRoot(card)
   const result = evaluateNow(card.rules, root, events, now)
-  const mode = card.rules.now.kind === 'off' ? null : card.rules.now.kind
   return {
     id: card.id,
     name: card.tag,
     emoji: card.emoji,
     status: result.status,
-    mode,
+    mode: result.mode,
     progress: result.progress,
-    nowHours: mode !== null && result.lastAt !== null ? (now - result.lastAt) / 3600 : null,
+    nowHours: result.mode !== null && result.lastAt !== null ? (now - result.lastAt) / 3600 : null,
     maxHours: result.maxHours,
     strip: evaluateDays(card.rules, root, events, now),
   }

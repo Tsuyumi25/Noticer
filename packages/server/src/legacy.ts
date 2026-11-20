@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { BackRule, Filter, Find, NowRule, RawConfig, Rules, Want } from './config.ts'
+import { durationBefore } from './rules.ts'
 
 const statusSchema = z.enum(['good', 'pending', 'warning', 'danger'])
 
@@ -79,14 +80,16 @@ function toFind(source: Source, root: string, where: string): Find {
   return { match: 'any', blocks: alternatives.map((n) => ({ ops: ['all'], layers: [[row(n)]] })) }
 }
 
+/** A single deadline is where it turns red; the warning starts one duration earlier. */
 function toNow(tracker: StatusTracker): NowRule {
   if (tracker.type === 'deadline') {
     const limits = tracker.stages.map((s) => s.lessThan / 1000).sort((a, b) => a - b)
-    return limits.length === 1 ? { kind: 'worry', after: limits[0]! } : { kind: 'worry', after: limits.at(-2)!, panic: limits.at(-1)! }
+    const danger = limits.at(-1)!
+    return { late: { warn: limits.length === 1 ? durationBefore(danger) : limits.at(-2)!, danger } }
   }
   const stages = [...tracker.stages].sort((a, b) => a.atLeast - b.atLeast)
   const ready = stages.find((s) => s.status === 'good') ?? stages.at(-1)!
-  return { kind: 'soon', within: ready.atLeast / 1000 }
+  return { soon: ready.atLeast / 1000 }
 }
 
 function toWant(stages: CompareStage[], where: string): Want {
@@ -141,7 +144,7 @@ export function convertLegacyConfig(raw: unknown): RawConfig {
         const own = toFind(backTracker.source, root, `tracker ${backTracker.id}`)
         back = { ...toBack(backTracker, `tracker ${backTracker.id}`), ...(JSON.stringify(own) === JSON.stringify(find) ? {} : { find: own }) }
       }
-      const rules: Rules = { find, now: nowTracker ? toNow(nowTracker) : { kind: 'off' }, back }
+      const rules: Rules = { find, now: nowTracker ? toNow(nowTracker) : {}, back }
       return { ...card, rules }
     }),
   }

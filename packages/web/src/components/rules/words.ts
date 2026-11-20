@@ -33,10 +33,11 @@ export function amount(measure: Measure, facts: Fact[], n: number): string {
 }
 
 export function nowReason(now: NowRule, lastAt: number | null, at: number, status: string): string {
-  if (now.kind === 'off') return t('rules.why.off')
+  const marks = [now.soon, now.late?.warn, now.late?.danger].filter((m) => m !== undefined)
+  if (!marks.length) return t('rules.why.off')
   if (lastAt === null) return t('rules.why.none')
   const gap = at - lastAt
-  const threshold = now.kind === 'soon' ? now.within : now.panic !== undefined && gap >= now.panic ? now.panic : now.after
-  const reason = t(gap >= threshold ? 'rules.why.over' : 'rules.why.under', { d: duration(threshold) })
-  return t('rules.why.now', { when: clock(lastAt), gap: elapsed(gap), reason, status: statusWord(status) })
+  const passed = marks.findLast((m) => gap >= m)
+  const reason = passed === undefined ? t('rules.why.under', { d: duration(marks[0]!) }) : t('rules.why.over', { d: duration(passed) })
+  return t('rules.why.now', { when: clock(lastAt), gap: elapsed(gap), reason, status: t(`rules.state.${status}` as MessageKey) })
 }

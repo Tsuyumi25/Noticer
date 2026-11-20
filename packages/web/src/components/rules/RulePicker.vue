@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import type { BackRule, Measure, Rules, Want } from 'server/config'
-import { dayStarts } from 'server/rules'
+import { dayStarts, DURATIONS } from 'server/rules'
 import { computed } from 'vue'
 import { locale, t, tn, type MessageKey } from '../../i18n/index.ts'
 import { ACCENT } from '../../status.ts'
-import { DURATIONS, nextDuration, PREVIEW_DAYS, useRules, type Trial } from './context.ts'
+import { PREVIEW_DAYS, useRules, type Trial } from './context.ts'
 import FindPicker from './FindPicker.vue'
 import { amount, clock, duration, elapsed, measureLabel, statusWord } from './words.ts'
 
-const { data, draft, tab, picker, findOf, counted, trial, days, closePicker: close } = useRules()
+const { data, draft, tab, picker, findOf, counted, gaps, trial, days, closePicker: close } = useRules()
 const p = computed(() => picker.value!)
 const FIND_KINDS = new Set(['add', 'tags', 'hour', 'weekday'])
 
-const DAY = 86400
 const H = 3600
 
 const find = computed(() => ('tab' in p.value ? findOf(draft.value, p.value.tab) : draft.value.find))
@@ -48,15 +47,6 @@ const options = computed<{ title: string; sub?: string; list: Option[] } | null>
     ...extra,
   })
   switch (cur.kind) {
-    case 'remind':
-      return {
-        title: t('rules.pick.remind'),
-        list: [
-          opt('worry', t('rules.remind.worry'), (r) => (r.now = r.now.kind === 'worry' ? r.now : { kind: 'worry', after: DAY }), { desc: t('rules.remind.worryDesc'), on: draft.value.now.kind === 'worry' }),
-          opt('soon', t('rules.remind.soon'), (r) => (r.now = r.now.kind === 'soon' ? r.now : { kind: 'soon', within: 4 * H }), { desc: t('rules.remind.soonDesc'), on: draft.value.now.kind === 'soon' }),
-          opt('off', t('rules.remind.off'), (r) => (r.now = { kind: 'off' }), { desc: t('rules.remind.offDesc'), on: draft.value.now.kind === 'off' }),
-        ],
-      }
     case 'span':
       return {
         title: t('rules.pick.span'),
@@ -96,46 +86,32 @@ const options = computed<{ title: string; sub?: string; list: Option[] } | null>
   }
 })
 
-const gaps = computed(() => {
-  const since = data.now - 90 * DAY
-  const times = counted(draft.value.find)
-    .map((e) => e.eventAt)
-    .filter((at) => at >= since)
-  return times.slice(1).map((at, i) => at - times[i]!)
-})
+type Field = 'soon' | 'warn' | 'danger'
 const durationChoices = computed(() => {
   if (p.value.kind !== 'duration') return []
   const field = p.value.field
-  const now = draft.value.now
-  const current = now.kind === 'worry' ? (field === 'panic' ? now.panic : now.after) : now.kind === 'soon' ? now.within : undefined
-  const sorted = [...gaps.value].sort((a, b) => a - b)
-  const median = sorted[Math.floor(sorted.length / 2)]
-  let list = median === undefined ? DURATIONS : DURATIONS.filter((d) => d >= median / 6 && d <= sorted.at(-1)! * 1.5)
+  const { soon, late } = draft.value.now
+  const current = field === 'soon' ? soon : late?.[field]
+  const sorted = gaps.value
+  let list = sorted.length ? DURATIONS.filter((d) => d >= sorted[0]! / 2 && d <= sorted.at(-1)! * 1.5) : DURATIONS
   if (list.length < 6) list = DURATIONS
-  if (field === 'panic' && now.kind === 'worry') list = list.filter((d) => d > now.after)
+  const lo = field === 'warn' ? soon : field === 'danger' ? late?.warn : undefined
+  const hi = field === 'soon' ? late?.warn : field === 'warn' ? late?.danger : undefined
+  list = list.filter((d) => (lo === undefined || d > lo) && (hi === undefined || d < hi))
   if (current !== undefined && !list.includes(current)) list = [...list, current].sort((a, b) => a - b)
-  return list.map((d) => ({
-    d,
-    on: d === current,
-    over: gaps.value.length ? Math.round((gaps.value.filter((g) => g > d).length / gaps.value.length) * 100) : null,
-    trial: trial((r) => setDuration(r, field, d)),
-  }))
+  return list.map((d) => ({ d, on: d === current }))
 })
-function setDuration(r: Rules, field: 'after' | 'panic' | 'within', d: number) {
-  const now = r.now
-  if (now.kind === 'soon' && field === 'within') now.within = d
-  if (now.kind !== 'worry') return
-  if (field === 'panic') now.panic = d
-  if (field === 'after') {
-    now.after = d
-    if (now.panic !== undefined && now.panic <= d) now.panic = nextDuration(d)
-  }
+function setDuration(field: Field, d: number) {
+  const now = draft.value.now
+  if (field === 'soon') now.soon = d
+  else if (now.late) now.late[field] = d
+  close()
 }
-const durationSub = computed(() => {
-  const sorted = [...gaps.value].sort((a, b) => a - b)
-  const median = sorted[Math.floor(sorted.length / 2)]
-  return median === undefined ? t('rules.pick.durationNoData') : t('rules.pick.durationSub', { median: elapsed(median), max: elapsed(sorted.at(-1)!) })
-})
+function removeSide(field: Field) {
+  if (field === 'soon') delete draft.value.now.soon
+  else delete draft.value.now.late
+  close()
+}
 
 const amountChoices = computed(() => {
   if (p.value.kind !== 'amount' || !draft.value.back) return []
@@ -222,20 +198,16 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
 
           <template v-else-if="p.kind === 'duration'">
             <h2 class="px-4 pt-2 text-base font-semibold">{{ fieldTitle(p.field) }}</h2>
-            <p class="px-4 pt-0.5 text-sm text-zinc-500">{{ durationSub }}</p>
             <div class="mt-3 grid grid-cols-3 gap-2 px-4">
-              <button
-                v-for="c in durationChoices"
-                :key="c.d"
-                class="chip"
-                :class="{ on: c.on }"
-                @click="(setDuration(draft, (p as { field: 'after' | 'panic' | 'within' }).field, c.d), close())"
-              >
-                <span class="inline-flex items-center gap-1.5"><i class="dot" :style="{ background: ACCENT[c.trial.model.status] }" />{{ duration(c.d) }}</span>
-                <span v-if="c.over !== null" class="text-[11px] font-normal opacity-70">{{ t('rules.pick.over', { n: c.over }) }}</span>
+              <button v-for="c in durationChoices" :key="c.d" class="chip" :class="{ on: c.on }" @click="setDuration((p as { field: Field }).field, c.d)">
+                {{ duration(c.d) }}
               </button>
             </div>
-            <p class="px-4 pt-3 text-xs text-zinc-500">{{ t('rules.pick.dotHint') }}</p>
+            <div class="mt-4 px-4">
+              <button class="opt font-semibold text-red-600" @click="removeSide((p as { field: Field }).field)">
+                {{ t(p.field === 'soon' ? 'rules.now.removeSoon' : 'rules.now.removeLate') }}
+              </button>
+            </div>
           </template>
 
           <template v-else-if="p.kind === 'amount' && draft.back">
