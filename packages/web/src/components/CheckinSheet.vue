@@ -249,6 +249,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           :fallback="specOf.get(pad)!.default"
           :row="specOf.get(pad)!.auto ? PAD_ROWS[card.id] : undefined"
           skippable
+          removable
           @done="setAmount(pad!, $event)"
           @remove="dropAmount(pad!)"
           @cancel="pad = null"

@@ -18,6 +18,8 @@ const props = defineProps<{
   skippable?: boolean
   /** Show 5 rather than 5.0 when the decimals are only there to allow a half. */
   trim?: boolean
+  /** Offer a key that drops the number and what carries it. */
+  removable?: boolean
 }>()
 const emit = defineEmits<{ done: [value: number | null]; remove: []; cancel: [] }>()
 
@@ -75,7 +77,8 @@ function setBase(v: number) {
       <button :disabled="decimals === 0" class="disabled:opacity-30" @click="key('.')">.</button>
       <button @click="key('0')">0</button>
       <button @click="key('00')">00</button>
-      <button class="op text-red-600" @click="emit('remove')">{{ t('pad.remove') }}</button>
+      <button v-if="removable" class="op text-red-600" @click="emit('remove')">{{ t('pad.remove') }}</button>
+      <span v-else />
     </div>
     <div class="grid grid-cols-2 gap-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="emit('cancel')">{{ t('common.cancel') }}</button>

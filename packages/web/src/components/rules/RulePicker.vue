@@ -89,8 +89,11 @@ const options = computed<{ title: string; sub?: string; list: Option[] } | null>
 })
 
 type Field = 'soon' | 'warn' | 'danger'
-type DurationUnit = 'hour' | 'day'
-const UNIT_SECONDS: Record<DurationUnit, number> = { hour: H, day: DAY }
+type DurationUnit = 'minute' | 'hour' | 'day' | 'week'
+const UNIT_SECONDS: Record<DurationUnit, number> = { minute: 60, hour: H, day: DAY, week: 7 * DAY }
+const UNITS = Object.keys(UNIT_SECONDS) as DurationUnit[]
+/** The largest unit that shows these seconds with at most one decimal. */
+const unitFor = (s: number): DurationUnit => [...UNITS].reverse().find((u) => s >= UNIT_SECONDS[u] && Number.isInteger((s / UNIT_SECONDS[u]) * 10)) ?? 'minute'
 
 const durationField = computed(() => (p.value.kind === 'duration' ? p.value.field : null))
 const durationNow = computed(() => {
@@ -107,7 +110,7 @@ watch(
     if (f === null) return
     const s = durationNow.value ?? null
     durationSeconds.value = s
-    durationUnit.value = s !== null && s >= DAY && s % (DAY / 2) === 0 ? 'day' : 'hour'
+    durationUnit.value = s === null ? 'hour' : unitFor(s)
   },
   { immediate: true },
 )
@@ -162,17 +165,41 @@ function removeSide(field: Field) {
   close()
 }
 
-const amountChoices = computed(() => {
-  if (p.value.kind !== 'amount' || !draft.value.back) return []
-  const field = p.value.field
+type AmountField = 'n' | 'red' | 'lo' | 'hi'
+const amountField = computed(() => (p.value.kind === 'amount' && draft.value.back ? p.value.field : null))
+const amountPad = computed(() => {
+  const field = amountField.value
   const back = draft.value.back
-  const want: Partial<Record<'n' | 'red' | 'lo' | 'hi', number>> = back.want.kind === 'off' ? {} : back.want
-  const current = want[field] ?? 0
-  const step = back.measure.kind === 'total' ? 5 : 1
-  return Array.from({ length: 12 }, (_, i) => current + (i - 5) * step)
-    .filter((v) => v >= 0 && (field !== 'red' || v > (want.n ?? 0)))
-    .map((v) => ({ v, on: v === current, trial: trial((r) => setAmount(r, field, v)) }))
+  if (field === null || !back) return null
+  const m = back.measure
+  const want: Partial<Record<AmountField, number>> = back.want.kind === 'off' ? {} : back.want
+  const decimals = 'unit' in m ? (data.units.find((u) => u.unit === m.unit)?.decimals ?? 0) : 0
+  const unit = 'unit' in m ? m.unit : m.kind === 'since' ? t('time.unit.day') : t('rules.timesUnit')
+  return { field, unit, decimals, value: want[field] ?? null, min: field === 'red' ? (want.n ?? 0) : -1 }
 })
+/** Tidy amounts near what the last four weeks actually reached. */
+const amountCandidates = computed(() => {
+  const pad = amountPad.value
+  if (!pad) return []
+  const seen = (days(draft.value)?.values ?? []).filter((v): v is number => v !== null && v > 0).sort((a, b) => a - b)
+  if (!seen.length) return []
+  const tidy = (v: number) => {
+    const step = pad.decimals > 0 ? 10 ** -pad.decimals : v >= 1000 ? 100 : v >= 100 ? 50 : v >= 20 ? 5 : 1
+    return Number((Math.round(v / step) * step).toFixed(pad.decimals))
+  }
+  const picks = [0.25, 0.5, 0.75, 0.9].map((q) => tidy(seen[Math.min(seen.length - 1, Math.floor(seen.length * q))]!))
+  return [...new Set(picks)].filter((v) => v > pad.min).sort((a, b) => a - b)
+})
+function doneAmount(value: number | null) {
+  const pad = amountPad.value
+  if (pad && value !== null && value > pad.min) setAmount(draft.value, pad.field, value)
+  close()
+}
+function removeRed() {
+  const w = draft.value.back?.want
+  if (w?.kind === 'atMost') delete w.red
+  close()
+}
 function setAmount(r: Rules, field: 'n' | 'red' | 'lo' | 'hi', v: number) {
   const w = r.back?.want
   if (!w || w.kind === 'off') return
@@ -220,10 +247,23 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
 <template>
   <Teleport to="body">
     <div class="fixed inset-0 z-[60] flex items-end bg-black/40" @click.self="close">
-      <section class="flex max-h-[82dvh] w-full flex-col rounded-t-2xl bg-white" :class="{ 'pb-[env(safe-area-inset-bottom)]': p.kind !== 'duration' }">
+      <section class="flex max-h-[82dvh] w-full flex-col rounded-t-2xl bg-white" :class="{ 'pb-[env(safe-area-inset-bottom)]': p.kind !== 'duration' && !amountPad }">
         <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
         <ValuePad
-          v-if="p.kind === 'duration'"
+          v-if="amountPad"
+          class="border-t-0"
+          :label="fieldTitle(amountPad.field)"
+          :unit="amountPad.unit"
+          :decimals="amountPad.decimals"
+          :value="amountPad.value"
+          :candidates="amountCandidates"
+          :removable="amountPad.field === 'red'"
+          @done="doneAmount"
+          @remove="removeRed"
+          @cancel="close"
+        />
+        <ValuePad
+          v-else-if="p.kind === 'duration'"
           ref="durationPad"
           :key="durationUnit"
           class="border-t-0"
@@ -233,13 +273,14 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
           :value="durationSeconds === null ? null : durationSeconds / UNIT_SECONDS[durationUnit]"
           :candidates="durationCandidates"
           trim
+          removable
           @done="doneDuration"
           @remove="removeSide((p as { field: Field }).field)"
           @cancel="close"
         >
           <template #aside>
             <span class="unitseg">
-              <button v-for="u in ['hour', 'day'] as const" :key="u" :class="{ on: durationUnit === u }" @click="switchUnit(u)">{{ t(`time.unit.${u}`) }}</button>
+              <button v-for="u in UNITS" :key="u" :class="{ on: durationUnit === u }" @click="switchUnit(u)">{{ t(`time.unit.${u}`) }}</button>
             </span>
           </template>
         </ValuePad>
@@ -262,23 +303,6 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
                   </span>
                   <span v-else class="bar"><b v-for="x in tally(o.trial)" :key="x.s" :style="{ width: x.width, background: FILL[x.s] }" /></span>
                 </span>
-              </button>
-            </div>
-          </template>
-
-          <template v-else-if="p.kind === 'amount' && draft.back">
-            <h2 class="px-4 pt-2 text-base font-semibold">{{ fieldTitle(p.field) }}</h2>
-            <p class="px-4 pt-0.5 text-sm text-zinc-500">{{ t('rules.pick.amountSub') }}</p>
-            <div class="mt-3 grid grid-cols-3 gap-2 px-4">
-              <button
-                v-for="c in amountChoices"
-                :key="c.v"
-                class="chip"
-                :class="{ on: c.on }"
-                @click="(setAmount(draft, (p as { field: 'n' | 'red' | 'lo' | 'hi' }).field, c.v), close())"
-              >
-                <span>{{ amount(draft.back.measure, data.units, c.v) }}</span>
-                <span class="bar w-full"><b v-for="x in tally(c.trial)" :key="x.s" :style="{ width: x.width, background: FILL[x.s] }" /></span>
               </button>
             </div>
           </template>
@@ -328,7 +352,7 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
 }
 .unitseg button {
   position: relative;
-  min-width: 52px;
+  min-width: 44px;
   height: 32px;
   border-radius: 8px;
   color: #71717a;
