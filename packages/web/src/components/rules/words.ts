@@ -17,19 +17,17 @@ export const clock = (seconds: number) =>
 
 export const statusWord = (status: string) => t(`rules.status.${status}` as MessageKey)
 
-type Fact = RulesData['facts'][number]
-const factOf = (facts: Fact[], measure: Measure) => ('fact' in measure ? facts.find((f) => f.key === measure.fact) : undefined)
+type Unit = RulesData['units'][number]
 
-export function measureLabel(measure: Measure, facts: Fact[]): string {
-  const fact = factOf(facts, measure)?.name ?? ''
-  return t(`rules.measure.${measure.kind}`, { fact })
+export function measureLabel(measure: Measure): string {
+  return t(`rules.measure.${measure.kind}`, { fact: 'unit' in measure ? measure.unit : '' })
 }
 
-export function amount(measure: Measure, facts: Fact[], n: number): string {
+export function amount(measure: Measure, units: Unit[], n: number): string {
   if (measure.kind === 'times') return tn('rules.times', n)
   if (measure.kind === 'since') return tn('time.days', n)
-  const fact = factOf(facts, measure)
-  return `${fact ? n.toFixed(Math.min(fact.decimals, String(n).split('.')[1]?.length ?? 0)) : n} ${fact?.unit ?? ''}`.trim()
+  const unit = units.find((u) => u.unit === measure.unit)
+  return `${unit ? n.toFixed(Math.min(unit.decimals, String(n).split('.')[1]?.length ?? 0)) : n} ${measure.unit}`
 }
 
 export function nowReason(now: NowRule, lastAt: number | null, at: number, status: string): string {

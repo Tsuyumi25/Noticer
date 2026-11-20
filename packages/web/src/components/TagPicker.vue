@@ -1,18 +1,30 @@
 <script setup lang="ts">
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
+import type { ValueSpec } from 'server/config'
+import type { ValueInput } from 'server/facts'
 import type { CardTags } from 'server/tags'
 import Sortable from 'sortablejs'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { api } from '../api.ts'
 import { t } from '../i18n/index.ts'
 
-const props = defineProps<{ cardId: string; editing: boolean; modelValue: string[] | null }>()
-const emit = defineEmits<{ 'update:modelValue': [tags: string[]] }>()
+const props = defineProps<{
+  cardId: string
+  editing: boolean
+  modelValue: string[] | null
+  /** Tags that carry a number under this card's root, with the number each one has now. */
+  values?: ValueInput[]
+  amounts?: Record<string, number | null>
+  activeValue?: string | null
+}>()
+const emit = defineEmits<{ 'update:modelValue': [tags: string[]]; value: [tag: string] }>()
 
 type TagGroup = CardTags['groups'][number]
 
 /** Container id of the tags outside any group; never a real group name. */
 const UNGROUPED = '__ungrouped__'
+/** Menu container of the card's own tags, which only take a unit. */
+const AUTO = '__auto__'
 const PALETTE = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#ef4444', '#14b8a6', '#84cc16']
 
 const queryClient = useQueryClient()
@@ -54,6 +66,16 @@ const grouped = computed(() => new Set(groups.value.flatMap((g) => g.tags.map((t
 // Older settings also stored hidden tags as "group.label".
 const isHidden = (label: string) => hidden.value.some((h) => h === label || h.endsWith(`.${label}`))
 const shown = (label: string) => !auto.value.has(label) && (props.editing || !isHidden(label))
+/** Tags the card attaches by itself; only edit mode lists them, to set what number they carry. */
+const autoTags = computed(() => data.value?.auto ?? [])
+
+const specOf = computed(() => new Map((props.values ?? []).map((v) => [v.tag, v])))
+/** The number a value chip shows: what was set for a picked tag, otherwise what picking it would set. */
+function amountText(label: string): string {
+  const spec = specOf.value.get(label)!
+  const v = selected.value.has(label) || spec.auto ? props.amounts?.[label] : spec.default
+  return v === null || v === undefined ? '—' : v.toFixed(spec.decimals)
+}
 
 const visibleGroups = computed(() => groups.value.map((g) => ({ ...g, tags: g.tags.filter((t) => shown(t.label)) })))
 const ungrouped = computed(() =>
@@ -215,6 +237,37 @@ function moveTo(container: string) {
   saveGroups()
 }
 
+// ---------- values ----------
+const unitSheet = ref<{ tag: string; unit: string; decimals: number; keep: ValueSpec['keep'] } | null>(null)
+
+function openUnit(tag: string) {
+  const spec = specOf.value.get(tag)
+  unitSheet.value = { tag, unit: spec?.unit ?? '', decimals: spec?.decimals ?? 0, keep: spec?.keep ?? 'sum' }
+}
+
+async function saveValues(tag: string, spec: ValueSpec | null) {
+  error.value = ''
+  const root = data.value?.root
+  if (!root) return
+  const values: Record<string, ValueSpec> = {}
+  for (const v of props.values ?? []) {
+    values[v.tag] = { unit: v.unit, decimals: v.decimals, keep: v.keep, ...(v.pinned === undefined ? {} : { default: v.pinned }) }
+  }
+  if (spec) values[tag] = spec
+  else delete values[tag]
+  const res = await api['tag-values'][':root'].$put({ param: { root }, json: { values } })
+  if (!res.ok) error.value = t('tags.saveValuesFailed', { status: res.status })
+  await queryClient.invalidateQueries({ queryKey: ['cardInputs'] })
+}
+
+function confirmUnit() {
+  const u = unitSheet.value
+  if (!u || !u.unit.trim() || u.unit.includes(':')) return
+  const pinned = specOf.value.get(u.tag)?.pinned
+  saveValues(u.tag, { unit: u.unit.trim(), decimals: u.decimals, keep: u.keep, ...(pinned === undefined ? {} : { default: pinned }) })
+  unitSheet.value = null
+}
+
 defineExpose({ addGroup })
 
 const vFocus = { mounted: (el: HTMLElement) => el.focus() }
@@ -274,6 +327,14 @@ onBeforeUnmount(() => {
 <template>
   <div ref="root" class="picker" :class="{ editing }">
     <p v-if="error" class="mb-2 text-sm text-red-600">{{ error }}</p>
+    <section v-if="editing && autoTags.length" class="group">
+      <div class="ghead"><h4 class="gtitle" style="border-left-color: #9ca3af">{{ t('tags.auto') }}</h4></div>
+      <div class="chips">
+        <button v-for="label in autoTags" :key="label" class="chip" @click="menu = { label, container: AUTO }">
+          {{ label }}<span v-if="specOf.get(label)" class="text-zinc-400">{{ specOf.get(label)!.unit }}</span>
+        </button>
+      </div>
+    </section>
     <TransitionGroup tag="div" move-class="group-move">
       <section
         v-for="(g, gi) in visibleGroups"
@@ -290,16 +351,26 @@ onBeforeUnmount(() => {
           </template>
         </div>
         <div class="chips" :data-container="g.name">
-          <button
-            v-for="t in g.tags"
-            :key="t.label"
-            class="chip"
-            :class="editing ? { on: defaults.includes(t.label), hid: isHidden(t.label) } : { on: selected.has(t.label) }"
-            :data-tag="t.label"
-            @click="onChipClick(t.label, g.name)"
-          >
-            <span v-if="t.emoji" class="emoji">{{ t.emoji }}</span>{{ t.label }}
-          </button>
+          <template v-for="t in g.tags" :key="t.label">
+            <span
+              v-if="!editing && specOf.has(t.label)"
+              class="vchip"
+              :class="{ on: selected.has(t.label), active: activeValue === t.label }"
+              :data-tag="t.label"
+            >
+              <button class="vname" @click="onChipClick(t.label, g.name)"><span v-if="t.emoji" class="emoji">{{ t.emoji }}</span>{{ t.label }}</button>
+              <button class="vamount" @click="emit('value', t.label)">{{ amountText(t.label) }}</button>
+            </span>
+            <button
+              v-else
+              class="chip"
+              :class="editing ? { on: defaults.includes(t.label), hid: isHidden(t.label) } : { on: selected.has(t.label) }"
+              :data-tag="t.label"
+              @click="onChipClick(t.label, g.name)"
+            >
+              <span v-if="t.emoji" class="emoji">{{ t.emoji }}</span>{{ t.label }}
+            </button>
+          </template>
           <button class="chip add" @click="addCustom(g.name)">{{ t('tags.custom') }}</button>
         </div>
       </section>
@@ -307,16 +378,21 @@ onBeforeUnmount(() => {
     <section class="group">
       <div class="ghead"><h4 class="gtitle" style="border-left-color: #9ca3af">{{ t('tags.ungrouped') }}</h4></div>
       <div class="chips" :data-container="UNGROUPED">
-        <button
-          v-for="label in ungrouped"
-          :key="label"
-          class="chip"
-          :class="editing ? { on: defaults.includes(label), hid: isHidden(label) } : { on: selected.has(label) }"
-          :data-tag="label"
-          @click="onChipClick(label, UNGROUPED)"
-        >
-          {{ label }}
-        </button>
+        <template v-for="label in ungrouped" :key="label">
+          <span v-if="!editing && specOf.has(label)" class="vchip" :class="{ on: selected.has(label), active: activeValue === label }" :data-tag="label">
+            <button class="vname" @click="onChipClick(label, UNGROUPED)">{{ label }}</button>
+            <button class="vamount" @click="emit('value', label)">{{ amountText(label) }}</button>
+          </span>
+          <button
+            v-else
+            class="chip"
+            :class="editing ? { on: defaults.includes(label), hid: isHidden(label) } : { on: selected.has(label) }"
+            :data-tag="label"
+            @click="onChipClick(label, UNGROUPED)"
+          >
+            {{ label }}
+          </button>
+        </template>
         <button v-if="!editing" class="chip add" @click="addCustom(UNGROUPED)">{{ t('tags.custom') }}</button>
       </div>
     </section>
@@ -325,10 +401,15 @@ onBeforeUnmount(() => {
       <div v-if="menu" class="layer" @click.self="menu = null">
         <div class="bs">
           <p class="bs-title">{{ t('common.quoted', { text: menu.label }) }}</p>
-          <button class="item" @click="toggleDefault(menu.label); menu = null">{{ defaults.includes(menu.label) ? t('tags.unsetDefault') : t('tags.setDefault') }}</button>
-          <button v-if="menu.container !== UNGROUPED" class="item" @click="changeEmoji(menu.label); menu = null">{{ t('tags.changeEmoji') }}</button>
-          <button class="item" @click="moveTarget = menu.label; menu = null">{{ t('tags.moveTo') }}</button>
-          <button class="item" @click="toggleHidden(menu.label); menu = null">{{ isHidden(menu.label) ? t('tags.unhide') : t('tags.hide') }}</button>
+          <template v-if="menu.container !== AUTO">
+            <button class="item" @click="toggleDefault(menu.label); menu = null">{{ defaults.includes(menu.label) ? t('tags.unsetDefault') : t('tags.setDefault') }}</button>
+            <button v-if="menu.container !== UNGROUPED" class="item" @click="changeEmoji(menu.label); menu = null">{{ t('tags.changeEmoji') }}</button>
+            <button class="item" @click="moveTarget = menu.label; menu = null">{{ t('tags.moveTo') }}</button>
+            <button class="item" @click="toggleHidden(menu.label); menu = null">{{ isHidden(menu.label) ? t('tags.unhide') : t('tags.hide') }}</button>
+          </template>
+          <button class="item" @click="openUnit(menu.label); menu = null">
+            {{ t('tags.unit') }}<span class="ml-auto text-zinc-500">{{ specOf.get(menu.label)?.unit ?? '' }}</span>
+          </button>
           <button class="close" @click="menu = null">{{ t('common.cancel') }}</button>
         </div>
       </div>
@@ -351,6 +432,25 @@ onBeforeUnmount(() => {
           <p v-if="promptError" class="mt-1 text-sm text-red-600">{{ promptError }}</p>
           <button type="submit" class="close primary">{{ t('common.ok') }}</button>
           <button type="button" class="close" @click="prompt = null">{{ t('common.cancel') }}</button>
+        </form>
+      </div>
+      <div v-if="unitSheet" class="layer" @click.self="unitSheet = null">
+        <form class="bs" @submit.prevent="confirmUnit">
+          <p class="bs-title">{{ t('tags.unitFor', { tag: unitSheet.tag }) }}</p>
+          <input v-model="unitSheet.unit" v-focus class="input" />
+          <p class="mt-3 mb-1.5 text-sm text-zinc-500">{{ t('tags.decimals') }}</p>
+          <div class="seg">
+            <button v-for="d in [0, 1, 2]" :key="d" type="button" :class="{ on: unitSheet.decimals === d }" @click="unitSheet.decimals = d">{{ d }}</button>
+          </div>
+          <p class="mt-3 mb-1.5 text-sm text-zinc-500">{{ t('tags.keep') }}</p>
+          <div class="seg">
+            <button v-for="k in ['sum', 'latest'] as const" :key="k" type="button" :class="{ on: unitSheet.keep === k }" @click="unitSheet.keep = k">
+              {{ t(k === 'sum' ? 'pad.sum' : 'pad.latest') }}
+            </button>
+          </div>
+          <button type="submit" class="close primary">{{ t('common.ok') }}</button>
+          <button v-if="specOf.has(unitSheet.tag)" type="button" class="close danger" @click="saveValues(unitSheet.tag, null); unitSheet = null">{{ t('tags.noValue') }}</button>
+          <button type="button" class="close" @click="unitSheet = null">{{ t('common.cancel') }}</button>
         </form>
       </div>
     </Teleport>
@@ -497,6 +597,78 @@ onBeforeUnmount(() => {
 .close.primary {
   background: #4f46e5;
   color: white;
+}
+.close.danger {
+  color: #dc2626;
+}
+.vchip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  background: white;
+  color: #374151;
+  font-size: 0.9rem;
+  font-weight: 500;
+  overflow: hidden;
+}
+.vchip .vname {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px 8px 12px;
+}
+.vchip .vamount {
+  position: relative;
+  min-width: 44px;
+  padding: 8px 10px;
+  border-left: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #a1a1aa;
+  font-variant-numeric: tabular-nums;
+}
+.vchip .vname::after,
+.vchip .vamount::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+.vchip.on {
+  border-color: #667eea;
+  background: #667eea;
+  color: white;
+}
+.vchip.on .vamount {
+  border-left-color: rgb(255 255 255 / 0.35);
+  background: #5a67d8;
+  color: white;
+  font-weight: 700;
+}
+.vchip.active {
+  outline: 2px solid #312e81;
+  outline-offset: 1px;
+}
+.vchip .emoji {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.seg {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 8px;
+}
+.seg button {
+  height: 44px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+.seg button.on {
+  border-color: #818cf8;
+  background: #eef2ff;
+  color: #3730a3;
+  font-weight: 600;
 }
 .input {
   width: 100%;

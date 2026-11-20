@@ -9,7 +9,8 @@
     "./facts": "./src/facts.ts",
     "./review": "./src/review.ts",
     "./rules": "./src/rules.ts",
-    "./tags": "./src/tags.ts"
+    "./tags": "./src/tags.ts",
+    "./values": "./src/values.ts"
   },
   "scripts": {
     "dev": "node --import tsx --watch src/index.ts",

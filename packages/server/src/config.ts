@@ -36,10 +36,11 @@ const nowSchema = z
   })
   .refine((n) => n.soon === undefined || n.late === undefined || n.soon < n.late.warn, { message: 'soon must end before warn' })
 
+/** `total` adds up and `last` takes the latest of the values recorded in `unit`, whichever tag carries them. */
 const measureSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('times') }),
-  z.object({ kind: z.literal('total'), fact: z.string() }),
-  z.object({ kind: z.literal('last'), fact: z.string() }),
+  z.object({ kind: z.literal('total'), unit: z.string() }),
+  z.object({ kind: z.literal('last'), unit: z.string() }),
   z.object({ kind: z.literal('since') }),
 ])
 
@@ -66,21 +67,6 @@ const backSchema = z.object({
 
 export const rulesSchema = z.object({ find: findSchema, now: nowSchema, back: backSchema.nullable() })
 
-const numberInputSchema = z
-  .object({
-    kind: z.literal('number'),
-    name: z.string(),
-    unit: z.string(),
-    decimals: z.number().int().min(0).max(3),
-    min: z.number(),
-    max: z.number(),
-    steps: z.array(z.number().positive()).min(1),
-    presets: z.array(z.number()).optional(),
-    initial: z.union([z.number(), z.literal('last')]).optional(),
-    required: z.boolean().optional(),
-  })
-  .refine((i) => i.min <= i.max, { message: 'min must not exceed max' })
-
 const choiceInputSchema = z.object({
   kind: z.literal('choice'),
   name: z.string(),
@@ -88,7 +74,7 @@ const choiceInputSchema = z.object({
   required: z.boolean().optional(),
 })
 
-const factInputSchema = z.discriminatedUnion('kind', [numberInputSchema, choiceInputSchema])
+const factInputSchema = choiceInputSchema
 
 const cardSchema = z.object({
   id: z.string(),
@@ -112,7 +98,20 @@ export const tagGroupsSchema = z
     return new Set(labels).size === labels.length
   }, { message: 'a tag can only be in one group' })
 
-const tagRootSchema = z.object({ emoji: z.string().optional(), groups: tagGroupsSchema })
+/** A number a tag carries in a root's events: `sum` values add up over a day, `latest` ones replace each other. */
+export const valueSpecSchema = z.object({
+  unit: z.string().trim().min(1).regex(/^[^:]+$/),
+  decimals: z.number().int().min(0).max(3),
+  keep: z.enum(['sum', 'latest']),
+  default: z.number().min(0).optional(),
+})
+
+/** `values`: which tags carry a number when they appear alongside this root, keyed by tag. */
+const tagRootSchema = z.object({
+  emoji: z.string().optional(),
+  groups: tagGroupsSchema,
+  values: z.record(z.string(), valueSpecSchema).optional(),
+})
 
 export const configSchema = z
   .object({
@@ -126,11 +125,16 @@ export const configSchema = z
         if (!(key in config.factInputs)) ctx.addIssue({ code: 'custom', message: `card ${card.id} uses unknown fact ${key}` })
       }
       const measure = card.rules.back?.measure
-      if (measure && 'fact' in measure && (!card.facts?.includes(measure.fact) || config.factInputs[measure.fact]?.kind !== 'number')) {
-        ctx.addIssue({ code: 'custom', message: `card ${card.id} measures ${measure.fact}, which is not one of its number facts` })
+      if (measure && 'unit' in measure && !rootUnits(config, card.bucket ?? card.tag).includes(measure.unit)) {
+        ctx.addIssue({ code: 'custom', message: `card ${card.id} measures ${measure.unit}, which no tag under its root carries` })
       }
     }
   })
+
+/** Units the tags under a root carry, in first-declared order. */
+export function rootUnits(config: Pick<Config, 'tagGroups'>, root: string): string[] {
+  return [...new Set(Object.values(config.tagGroups[root]?.values ?? {}).map((v) => v.unit))]
+}
 
 export type Config = z.infer<typeof configSchema>
 export type Rules = z.infer<typeof rulesSchema>
@@ -144,6 +148,7 @@ export type Want = z.infer<typeof wantSchema>
 export type Measure = z.infer<typeof measureSchema>
 export type CardConfig = z.infer<typeof cardSchema>
 export type FactInput = z.infer<typeof factInputSchema>
+export type ValueSpec = z.infer<typeof valueSpecSchema>
 export type TagGroup = z.infer<typeof tagGroupsSchema>[number]
 export type RuleStatus = z.infer<typeof statusSchema>
 
@@ -152,7 +157,7 @@ export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {} }
 /** The file as stored: card entries keep fields this app does not model yet (memo…). */
 export type RawConfig = {
   cards: Array<{ id: string } & Record<string, unknown>>
-  tagGroups?: Record<string, { emoji?: string; groups: unknown }>
+  tagGroups?: Record<string, { emoji?: string; groups: unknown; values?: Record<string, unknown> }>
 } & Record<string, unknown>
 
 export interface ConfigStore {

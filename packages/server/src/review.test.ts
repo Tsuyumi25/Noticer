@@ -14,11 +14,11 @@ const config: Config = {
   ...emptyConfig,
   cards: [
     { id: 'coffee', tag: '喝咖啡', emoji: '☕', rules: { ...unjudged, back: { span: 'day', measure: { kind: 'times' }, want: { kind: 'atLeast', n: 2 } } } },
-    { id: 'weight', tag: '體重', emoji: '⚖️', rules: unjudged, facts: ['weight_kg'] },
+    { id: 'weight', tag: '體重', emoji: '⚖️', rules: unjudged },
     { id: 'today', tag: '今日', emoji: '📔', rules: unjudged, facts: ['mood_emoji'] },
   ],
+  tagGroups: { 體重: { groups: [], values: { 體重: { unit: 'kg', decimals: 1, keep: 'latest' } } } },
   factInputs: {
-    weight_kg: { kind: 'number', name: '體重', unit: 'kg', decimals: 1, min: 30, max: 200, steps: [0.1] },
     mood_emoji: { kind: 'choice', name: '心情', options: [{ value: '🙂', label: '不錯' }] },
   },
 }
@@ -41,11 +41,11 @@ describe('cardCalendar', () => {
     ])
   })
 
-  it("shows a number fact's last value of the day and its change from the previous recorded day", () => {
+  it("shows the last value of the day in a unit that replaces itself, and its change from the previous recorded day", () => {
     const events = [
-      ev(local(11, 1, 8), ['體重'], { weight_kg: 50.6 }),
-      ev(local(11, 3, 8), ['體重'], { weight_kg: 50.4 }),
-      ev(local(11, 3, 21), ['體重'], { weight_kg: 50.2 }),
+      ev(local(11, 1, 8), ['體重'], { '體重:kg': 50.6 }),
+      ev(local(11, 3, 8), ['體重'], { '體重:kg': 50.4 }),
+      ev(local(11, 3, 21), ['體重'], { '體重:kg': 50.2 }),
     ]
     const { days, card: meta } = cardCalendar(config, card('weight'), events, local(11, 3, 22))
     expect(meta.decimals).toBe(1)

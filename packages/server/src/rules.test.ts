@@ -131,13 +131,17 @@ describe('evaluateDays', () => {
     expect(strip?.states.slice(2, 4)).toEqual(['good', 'danger'])
   })
 
-  it('sums or reads a number fact, leaving days without it empty', () => {
-    const events = [ev(local(14), ['練習'], { duration_min: 15 }), ev(local(20, 8), ['練習'], { duration_min: 10 }), ev(local(20, 9), ['練習'], { duration_min: 25 })]
-    const total = evaluateDays(rules({ span: 'day', measure: { kind: 'total', fact: 'duration_min' }, want: { kind: 'atLeast', n: 20 } }), '練習', events, now)
+  it('sums or reads the values recorded in a unit across tags, leaving days without one empty', () => {
+    const events = [
+      ev(local(14), ['練習', '鋼琴'], { '鋼琴:分鐘': 15 }),
+      ev(local(20, 8), ['練習', '鋼琴', '吉他'], { '鋼琴:分鐘': 10, '吉他:分鐘': 5 }),
+      ev(local(20, 9), ['練習', '長笛'], { '長笛:分鐘': 20, '長笛:首': 2 }),
+    ]
+    const total = evaluateDays(rules({ span: 'day', measure: { kind: 'total', unit: '分鐘' }, want: { kind: 'atLeast', n: 20 } }), '練習', events, now)
     expect(total?.values.slice(-1)).toEqual([35])
     expect(total?.states[0]).toBe('warning')
-    const weights = [ev(local(19, 8), ['體重'], { weight_kg: 53.2 }), ev(local(19, 22), ['體重'], { weight_kg: 53.6 })]
-    const last = evaluateDays(rules({ span: 'day', measure: { kind: 'last', fact: 'weight_kg' }, want: { kind: 'off' } }), '體重', weights, now)
+    const weights = [ev(local(19, 8), ['體重'], { '體重:kg': 53.2 }), ev(local(19, 22), ['體重'], { '體重:kg': 53.6 })]
+    const last = evaluateDays(rules({ span: 'day', measure: { kind: 'last', unit: 'kg' }, want: { kind: 'off' } }), '體重', weights, now)
     expect(last?.values.slice(-2)).toEqual([53.6, null])
     expect(last?.states.slice(-2)).toEqual(['logged', 'none'])
   })

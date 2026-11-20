@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
+import { parseValueKey } from 'server/values'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api.ts'
@@ -57,8 +58,8 @@ const { data: events, isPending, isError } = useQuery({
           <p v-if="event.note" class="text-sm whitespace-pre-wrap text-zinc-700">{{ event.note }}</p>
           <dl v-if="Object.keys(event.facts).length" class="flex flex-wrap gap-x-3 text-xs text-zinc-500">
             <div v-for="(value, key) in event.facts" :key="key" class="flex gap-1">
-              <dt>{{ key }}</dt>
-              <dd class="font-medium text-zinc-700">{{ value }}</dd>
+              <dt>{{ parseValueKey(String(key))?.tag ?? key }}</dt>
+              <dd class="font-medium text-zinc-700">{{ value }}{{ parseValueKey(String(key))?.unit ?? '' }}</dd>
             </div>
           </dl>
         </div>

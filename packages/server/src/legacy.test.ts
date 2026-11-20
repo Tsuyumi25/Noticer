@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import type { BackupRecord } from './backup.ts'
 import { configSchema } from './config.ts'
-import { convertLegacyConfig } from './legacy.ts'
+import { convertLegacyConfig, convertLegacyValues } from './legacy.ts'
 
 const D = 86400
 const ms = (seconds: number) => seconds * 1000
@@ -35,11 +36,11 @@ const legacy = {
     { id: 'sweet_coffee', type: 'periodLimit', source: { tag: '喝咖啡', tags: ['加糖'] }, target: { limit: 1, period: ms(7 * D) } },
   ],
   tagGroups: {},
-  factInputs: { weight_kg: { kind: 'number', name: '體重', unit: 'kg', decimals: 1, min: 30, max: 200, steps: [0.1] } },
+  factInputs: {},
 }
 
 describe('convertLegacyConfig', () => {
-  const converted = convertLegacyConfig(legacy)
+  const converted = convertLegacyValues(convertLegacyConfig(legacy), []).config
   const rules = (id: string) => configSchema.parse(converted).cards.find((c) => c.id === id)!.rules
 
   it('produces a valid config without trackers and keeps fields it does not model', () => {
@@ -89,5 +90,56 @@ describe('convertLegacyConfig', () => {
   it('refuses a card whose tracker counts another root', () => {
     const bad = { ...legacy, cards: [{ id: 'x', tag: '洗車', emoji: '🚗', trackerId: 'orphan' }] }
     expect(() => convertLegacyConfig(bad)).toThrow(/not the card's root/)
+  })
+})
+
+describe('convertLegacyValues', () => {
+  const record = (id: number, card_id: string, tags: string[], facts: BackupRecord['facts'] = {}): BackupRecord => ({
+    id, card_id, created_at: '2026-01-01T00:00:00Z', event_at: '2026-01-01T00:00:00Z', time_offset: 0, note: null, tags, facts,
+  })
+  const legacyConfig = {
+    cards: [
+      { id: 'practice', tag: '練習', emoji: '🎹', facts: ['duration_min'], rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
+      { id: 'weight', tag: '體重', emoji: '⚖️', facts: ['weight_kg'], rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
+      { id: 'water_plants', tag: '澆花', emoji: '🪴', defaultTags: ['350cc'], rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
+      { id: 'snacks', tag: '甜點', emoji: '🍪', rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
+    ],
+    tagGroups: {
+      練習: { groups: [{ name: '類型', color: '#000', tags: [{ label: '鋼琴', emoji: '' }, { label: '吉他', emoji: '' }] }] },
+      澆花: { groups: [{ name: '量', color: '#000', tags: [{ label: '350cc', emoji: '' }, { label: '多肉', emoji: '' }] }] },
+      甜點: { groups: [{ name: '點心', color: '#000', tags: [{ label: '糖果 x3', emoji: '🍭' }] }] },
+    },
+    factInputs: {},
+  }
+  const { config, records } = convertLegacyValues(legacyConfig, [
+    record(1, 'practice', ['練習', '鋼琴'], { duration_min: { type: 'integer', value: 20 } }),
+    record(2, 'practice', ['練習', '鋼琴', '吉他'], { duration_min: { type: 'integer', value: 30 } }),
+    record(6, 'practice', ['練習'], { duration_min: { type: 'integer', value: 10 } }),
+    record(3, 'weight', ['體重'], { weight_kg: { type: 'real', value: 53.5 } }),
+    record(4, 'water_plants', ['澆花', '250cc', '多肉']),
+    record(5, 'snacks', ['甜點', '糖果 x3']),
+  ])
+
+  it('puts a duration on the first other tag a record carries, and leaves it on the root only when there is none', () => {
+    expect(records[0]).toMatchObject({ tags: ['練習', '鋼琴'], facts: { '鋼琴:分鐘': { type: 'integer', value: 20 } } })
+    expect(records[1]!.facts).toEqual({ '鋼琴:分鐘': { type: 'integer', value: 30 } })
+    expect(records[2]!.facts).toEqual({ '練習:分鐘': { type: 'integer', value: 10 } })
+    expect(records[3]!.facts).toEqual({ '體重:kg': { type: 'real', value: 53.5 } })
+  })
+
+  it('turns 250cc tags into the root’s cc value and "x3" tags into a count on the bare tag', () => {
+    expect(records[4]).toMatchObject({ tags: ['澆花', '多肉'], facts: { '澆花:cc': { type: 'integer', value: 250 } } })
+    expect(records[5]).toMatchObject({ tags: ['甜點', '糖果'], facts: { '糖果:顆': { type: 'integer', value: 3 } } })
+  })
+
+  it('declares what each tag carries without lending a root its own, drops number facts and amount tags, and stays valid', () => {
+    const parsed = configSchema.parse(config)
+    expect(parsed.tagGroups['練習']?.values).toEqual({ 鋼琴: { unit: '分鐘', decimals: 0, keep: 'sum' }, 吉他: { unit: '分鐘', decimals: 0, keep: 'sum' } })
+    expect(parsed.tagGroups['體重']?.values).toEqual({ 體重: { unit: 'kg', decimals: 1, keep: 'latest' } })
+    expect(parsed.tagGroups['澆花']).toMatchObject({ groups: [{ tags: [{ label: '多肉' }] }], values: { 澆花: { unit: 'cc', decimals: 0, keep: 'sum', default: 350 } } })
+    expect(Object.keys(parsed.tagGroups['澆花']?.values ?? {})).toEqual(['澆花'])
+    expect(parsed.tagGroups['甜點']?.groups[0]?.tags).toEqual([{ label: '糖果', emoji: '🍭' }])
+    expect(parsed.cards.find((c) => c.id === 'water_plants')?.defaultTags).toEqual([])
+    expect(parsed.cards.every((c) => c.facts === undefined)).toBe(true)
   })
 })

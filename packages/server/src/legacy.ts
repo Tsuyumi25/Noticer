@@ -1,6 +1,8 @@
 import { z } from 'zod'
-import type { BackRule, Filter, Find, NowRule, RawConfig, Rules, Want } from './config.ts'
+import type { BackupRecord } from './backup.ts'
+import type { BackRule, Filter, Find, NowRule, RawConfig, Rules, ValueSpec, Want } from './config.ts'
 import { durationBefore } from './rules.ts'
+import { valueKey } from './values.ts'
 
 const statusSchema = z.enum(['good', 'pending', 'warning', 'danger'])
 
@@ -107,7 +109,7 @@ function toBack(tracker: PeriodicTracker, where: string): Omit<BackRule, 'find'>
     case 'dailyCount':
       return { span: 'day', measure: { kind: 'times' }, want: toWant(tracker.stages, where) }
     case 'duration':
-      return { span: 'day', measure: { kind: 'total', fact: 'duration_min' }, want: toWant(tracker.stages, where) }
+      return { span: 'day', measure: { kind: 'total', unit: LEGACY_NUMBERS.duration_min!.spec.unit }, want: toWant(tracker.stages, where) }
     case 'interval':
       return { span: 'day', measure: { kind: 'since' }, want: toWant(tracker.stages, where) }
     case 'dailyBinary':
@@ -148,4 +150,107 @@ export function convertLegacyConfig(raw: unknown): RawConfig {
       return { ...card, rules }
     }),
   }
+}
+
+/** Number facts the old app kept per card; `root` puts the value on the card's root tag, `tag` on the one other tag the record carries. */
+const LEGACY_NUMBERS: Record<string, { spec: ValueSpec; on: 'root' | 'tag' }> = {
+  weight_kg: { spec: { unit: 'kg', decimals: 1, keep: 'latest' }, on: 'root' },
+  duration_min: { spec: { unit: '分鐘', decimals: 0, keep: 'sum' }, on: 'tag' },
+}
+/** Amounts the old app could only store in tag names. */
+const VOLUME_TAG = /^(\d+)cc$/
+const DOSE_TAG = /^(.+) x(\d+)$/
+const VOLUME: ValueSpec = { unit: 'cc', decimals: 0, keep: 'sum' }
+const DOSE: ValueSpec = { unit: '顆', decimals: 0, keep: 'sum' }
+
+type RawGroups = { name: string; color: string; tags: { label: string; emoji: string }[] }[]
+
+/**
+ * Moves numbers into tag values: the old number facts, `350cc` tags (the root carries cc) and `糖果 x3` tags (the tag carries a count).
+ * Takes a config already through convertLegacyConfig and the records it goes with.
+ */
+export function convertLegacyValues(raw: RawConfig, records: BackupRecord[]): { config: RawConfig; records: BackupRecord[] } {
+  const config: RawConfig = structuredClone(raw)
+  config.tagGroups ??= {}
+  const tagGroups = config.tagGroups
+  const cards = new Map(config.cards.map((c) => [c.id, c as { id: string; tag: string; bucket?: string; facts?: string[]; defaultTags?: string[]; hiddenTags?: string[] }]))
+  const rootOf = (c: { tag: string; bucket?: string }) => c.bucket ?? c.tag
+  const declare = (root: string, tag: string, spec: ValueSpec) => {
+    const entry = (tagGroups[root] ??= { groups: [] })
+    const values = (entry.values ??= {}) as Record<string, ValueSpec>
+    values[tag] ??= { ...spec }
+  }
+
+  for (const card of cards.values()) {
+    const root = rootOf(card)
+    for (const key of card.facts ?? []) {
+      const legacy = LEGACY_NUMBERS[key]
+      if (legacy?.on === 'root') declare(root, root, legacy.spec)
+    }
+    card.facts = card.facts?.filter((k) => !(k in LEGACY_NUMBERS))
+    if (card.facts?.length === 0) delete card.facts
+    const groups = (tagGroups[root]?.groups ?? []) as RawGroups
+    for (const g of groups) {
+      const seen = new Set<string>()
+      g.tags = g.tags.flatMap((t) => {
+        if (VOLUME_TAG.test(t.label)) return []
+        const label = DOSE_TAG.exec(t.label)?.[1] ?? t.label
+        if (seen.has(label)) return []
+        seen.add(label)
+        return [{ ...t, label }]
+      })
+    }
+    for (const field of ['defaultTags', 'hiddenTags'] as const) {
+      const list = card[field]
+      if (!list) continue
+      const volume = list.map((t) => VOLUME_TAG.exec(t)).find(Boolean)
+      if (volume) declare(root, root, { ...VOLUME, default: Number(volume[1]) })
+      card[field] = list.filter((t) => !VOLUME_TAG.test(t)).map((t) => DOSE_TAG.exec(t)?.[1] ?? t)
+    }
+  }
+
+  const converted = records.map((r): BackupRecord => {
+    const card = cards.get(r.card_id)
+    if (!card) return r
+    const root = rootOf(card)
+    const auto = new Set([card.tag, ...(card.bucket ? [card.bucket] : [])])
+    const tags: string[] = []
+    const facts: BackupRecord['facts'] = {}
+    for (const t of r.tags) {
+      const volume = VOLUME_TAG.exec(t)
+      const dose = DOSE_TAG.exec(t)
+      if (volume) {
+        declare(root, root, VOLUME)
+        facts[valueKey(root, VOLUME.unit)] = { type: 'integer', value: Number(volume[1]) }
+      } else if (dose) {
+        declare(root, dose[1]!, DOSE)
+        tags.push(dose[1]!)
+        facts[valueKey(dose[1]!, DOSE.unit)] = { type: 'integer', value: Number(dose[2]) }
+      } else tags.push(t)
+    }
+    for (const [k, fact] of Object.entries(r.facts)) {
+      const legacy = LEGACY_NUMBERS[k]
+      if (!legacy) {
+        facts[k] = fact
+        continue
+      }
+      // A tag value goes to the first other tag; a record with none keeps it on the root without making the root carry one from now on.
+      const owner = legacy.on === 'tag' ? (tags.find((t) => !auto.has(t)) ?? null) : root
+      if (owner !== null) declare(root, owner, legacy.spec)
+      facts[valueKey(owner ?? root, legacy.spec.unit)] = fact
+    }
+    return { ...r, tags, facts }
+  })
+
+  // A group whose tags carry a number lends it to members never recorded with one; a root's own value is not lent.
+  for (const [root, entry] of Object.entries(tagGroups)) {
+    const values = entry.values as Record<string, ValueSpec> | undefined
+    if (!values) continue
+    for (const g of entry.groups as RawGroups) {
+      const spec = g.tags.filter((t) => t.label !== root).map((t) => values[t.label]).find(Boolean)
+      if (!spec) continue
+      for (const t of g.tags) if (t.label !== root) values[t.label] ??= { unit: spec.unit, decimals: spec.decimals, keep: spec.keep }
+    }
+  }
+  return { config, records: converted }
 }

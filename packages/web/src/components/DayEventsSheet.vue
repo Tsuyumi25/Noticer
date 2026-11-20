@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
+import { parseValueKey } from 'server/values'
 import { computed, onMounted, onUnmounted } from 'vue'
 import { api } from '../api.ts'
 import { t } from '../i18n/index.ts'
@@ -34,10 +35,10 @@ const { data: inputs } = useQuery({
 })
 
 function factLabel(key: string, value: string | number | boolean): string {
-  const input = inputs.value?.find((i) => i.key === key)
-  if (!input) return `${key} ${value}`
-  if (input.kind === 'choice') return `${value} ${input.options.find((o) => o.value === value)?.label ?? ''}`.trim()
-  return `${input.name} ${value} ${input.unit}`
+  const choice = inputs.value?.choices.find((i) => i.key === key)
+  if (choice) return `${value} ${choice.options.find((o) => o.value === value)?.label ?? ''}`.trim()
+  const tagged = parseValueKey(key)
+  return tagged ? `${tagged.tag} ${value}${tagged.unit}` : `${key} ${value}`
 }
 
 function onKeydown(e: KeyboardEvent) {

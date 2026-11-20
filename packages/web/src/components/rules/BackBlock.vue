@@ -24,24 +24,24 @@ function toggleRed() {
       <Tok v-if="!draft.back" @click="picker = { kind: 'span' }">{{ t('rules.span.none') }}</Tok>
       <Phrase v-else :text="t('rules.back.sentence')">
         <template #span><Tok @click="picker = { kind: 'span' }">{{ t(`rules.span.${draft.back.span}`) }}</Tok></template>
-        <template #measure><Tok @click="picker = { kind: 'measure' }">{{ measureLabel(draft.back.measure, data.facts) }}</Tok></template>
+        <template #measure><Tok @click="picker = { kind: 'measure' }">{{ measureLabel(draft.back.measure) }}</Tok></template>
         <template #want>
           <template v-if="draft.back.want.kind === 'off'">
             <Tok @click="picker = { kind: 'want' }">{{ t('rules.want.off') }}</Tok>
           </template>
           <Phrase v-else-if="draft.back.want.kind === 'between'" :text="t('rules.back.between')">
             <template #word><Tok @click="picker = { kind: 'want' }">{{ t('rules.want.between') }}</Tok></template>
-            <template #lo><Tok @click="picker = { kind: 'amount', field: 'lo' }">{{ amount(draft.back.measure, data.facts, draft.back.want.lo) }}</Tok></template>
-            <template #hi><Tok @click="picker = { kind: 'amount', field: 'hi' }">{{ amount(draft.back.measure, data.facts, draft.back.want.hi) }}</Tok></template>
+            <template #lo><Tok @click="picker = { kind: 'amount', field: 'lo' }">{{ amount(draft.back.measure, data.units, draft.back.want.lo) }}</Tok></template>
+            <template #hi><Tok @click="picker = { kind: 'amount', field: 'hi' }">{{ amount(draft.back.measure, data.units, draft.back.want.hi) }}</Tok></template>
           </Phrase>
           <template v-else>
             <Tok @click="picker = { kind: 'want' }">{{ t(`rules.want.${draft.back.want.kind}`) }}</Tok>
             {{ ' ' }}
             <Tok :tone="draft.back.want.kind === 'atMost' && draft.back.want.red !== undefined ? 'warning' : undefined" @click="picker = { kind: 'amount', field: 'n' }">
-              {{ amount(draft.back.measure, data.facts, draft.back.want.n) }}
+              {{ amount(draft.back.measure, data.units, draft.back.want.n) }}
             </Tok>
             <Phrase v-if="draft.back.want.kind === 'atMost' && draft.back.want.red !== undefined" :text="t('rules.back.red')">
-              <template #red><Tok tone="danger" @click="picker = { kind: 'amount', field: 'red' }">{{ amount(draft.back.measure, data.facts, draft.back.want.red) }}</Tok></template>
+              <template #red><Tok tone="danger" @click="picker = { kind: 'amount', field: 'red' }">{{ amount(draft.back.measure, data.units, draft.back.want.red) }}</Tok></template>
             </Phrase>
           </template>
         </template>

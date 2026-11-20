@@ -1,8 +1,8 @@
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { createCheckin } from './checkin.ts'
-import { rulesSchema, tagGroupsSchema, type ConfigStore } from './config.ts'
+import { checkinTags, createCheckin } from './checkin.ts'
+import { rootUnits, rulesSchema, tagGroupsSchema, valueSpecSchema, type ConfigStore } from './config.ts'
 import { buildDashboard } from './dashboard.ts'
 import type { DB } from './db.ts'
 import { listEvents } from './events.ts'
@@ -33,6 +33,8 @@ const checkinBody = z.object({
 
 const tagGroupsBody = z.object({ groups: tagGroupsSchema })
 
+const tagValuesBody = z.object({ values: z.record(z.string(), valueSpecSchema) })
+
 const tagSettingsBody = z.object({ hiddenTags: z.array(z.string()), defaultTags: z.array(z.string()) })
 
 const api = new Hono<Env>()
@@ -50,7 +52,7 @@ const api = new Hono<Env>()
     const config = c.var.store.read()
     const card = config.cards.find((k) => k.id === cardId)
     if (!card) return c.json({ error: `unknown card ${cardId}` }, 404)
-    const read = readFacts(config, card, facts)
+    const read = readFacts(config, card, facts, checkinTags(card, tags))
     if (!read.ok) return c.json({ error: read.error }, read.status)
     const trimmed = note.trim()
     const now = Math.floor(Date.now() / 1000)
@@ -94,16 +96,14 @@ const api = new Hono<Env>()
     if (!card) return c.json({ error: 'unknown card' }, 404)
     const root = cardRoot(card)
     const tags = cardTags(c.var.db, config, card)
-    const facts = (card.facts ?? []).flatMap((key) => {
-      const input = config.factInputs[key]!
-      return input.kind === 'number' ? [{ key, name: input.name, unit: input.unit, decimals: input.decimals }] : []
-    })
+    const specs = config.tagGroups[root]?.values ?? {}
+    const units = rootUnits(config, root).map((unit) => ({ unit, decimals: Math.max(...Object.values(specs).filter((s) => s.unit === unit).map((s) => s.decimals)) }))
     const now = Math.floor(Date.now() / 1000)
     return c.json({
       card: { id: card.id, name: card.tag, emoji: card.emoji, tag: card.tag, bucket: card.bucket },
       root,
       rules: card.rules,
-      facts,
+      units,
       tags: { groups: tags.groups.map((g) => ({ name: g.name, color: g.color, tags: g.tags.map((t) => t.label) })), ungrouped: tags.ungrouped },
       events: listEvents(c.var.db, 0, now + 1).filter((e) => e.tags.includes(root)),
       now,
@@ -116,8 +116,8 @@ const api = new Hono<Env>()
     const card = config.cards.find((k) => k.id === cardId)
     if (!card) return c.json({ error: 'unknown card' }, 404)
     const measure = rules.back?.measure
-    if (measure && 'fact' in measure && (!card.facts?.includes(measure.fact) || config.factInputs[measure.fact]?.kind !== 'number')) {
-      return c.json({ error: `card ${cardId} has no number fact ${measure.fact}` }, 422)
+    if (measure && 'unit' in measure && !rootUnits(config, cardRoot(card)).includes(measure.unit)) {
+      return c.json({ error: `no tag under card ${cardId}'s root carries ${measure.unit}` }, 422)
     }
     c.var.store.update((raw) => {
       raw.cards.find((k) => k.id === cardId)!.rules = rules
@@ -142,6 +142,23 @@ const api = new Hono<Env>()
     c.var.store.update((raw) => {
       raw.tagGroups ??= {}
       raw.tagGroups[root] = { ...raw.tagGroups[root], groups }
+    })
+    return c.body(null, 204)
+  })
+  .put('/tag-values/:root', zValidator('json', tagValuesBody), (c) => {
+    const root = c.req.param('root')
+    const { values } = c.req.valid('json')
+    const config = c.var.store.read()
+    if (!config.cards.some((k) => cardRoot(k) === root)) return c.json({ error: 'no card uses this root' }, 404)
+    const units = new Set(Object.values(values).map((v) => v.unit))
+    const measuring = config.cards.find((k) => {
+      const m = k.rules.back?.measure
+      return cardRoot(k) === root && m !== undefined && 'unit' in m && !units.has(m.unit)
+    })
+    if (measuring) return c.json({ error: `card ${measuring.id} still measures a unit these values drop` }, 422)
+    c.var.store.update((raw) => {
+      raw.tagGroups ??= {}
+      raw.tagGroups[root] = { ...raw.tagGroups[root], groups: raw.tagGroups[root]?.groups ?? [], values }
     })
     return c.body(null, 204)
   })

@@ -58,12 +58,12 @@ const options = computed<{ title: string; sub?: string; list: Option[] } | null>
         ),
       }
     case 'measure': {
-      const measures: Measure[] = [{ kind: 'times' }, { kind: 'since' }, ...data.facts.flatMap((f): Measure[] => [{ kind: 'total', fact: f.key }, { kind: 'last', fact: f.key }])]
+      const measures: Measure[] = [{ kind: 'times' }, { kind: 'since' }, ...data.units.flatMap((u): Measure[] => [{ kind: 'total', unit: u.unit }, { kind: 'last', unit: u.unit }])]
       return {
         title: t('rules.pick.measure'),
         list: measures.map((m) => {
-          const fact = 'fact' in m ? (data.facts.find((f) => f.key === m.fact)?.name ?? '') : ''
-          return opt(`${m.kind}-${'fact' in m ? m.fact : ''}`, measureLabel(m, data.facts), (r) => r.back && setMeasure(r.back, m), {
+          const fact = 'unit' in m ? m.unit : ''
+          return opt(`${m.kind}-${fact}`, measureLabel(m), (r) => r.back && setMeasure(r.back, m), {
             desc: t(`rules.measure.${m.kind}Desc`, { fact }),
             on: JSON.stringify(draft.value.back?.measure) === JSON.stringify(m),
           })
@@ -221,7 +221,7 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
                 :class="{ on: c.on }"
                 @click="(setAmount(draft, (p as { field: 'n' | 'red' | 'lo' | 'hi' }).field, c.v), close())"
               >
-                <span>{{ amount(draft.back.measure, data.facts, c.v) }}</span>
+                <span>{{ amount(draft.back.measure, data.units, c.v) }}</span>
                 <span class="bar w-full"><b v-for="x in tally(c.trial)" :key="x.s" :style="{ width: x.width, background: FILL[x.s] }" /></span>
               </button>
             </div>
@@ -244,7 +244,7 @@ const FILL: Record<string, string> = { good: '#34d399', warning: '#fbbf24', dang
               {{
                 day.value === null
                   ? t('rules.pick.dayNoData')
-                  : `${draft.back ? measureLabel(draft.back.measure, data.facts) : ''} ${draft.back ? amount(draft.back.measure, data.facts, day.value) : day.value}`
+                  : `${draft.back ? measureLabel(draft.back.measure) : ''} ${draft.back ? amount(draft.back.measure, data.units, day.value) : day.value}`
               }}
               → {{ statusWord(day.state) }}
             </h2>

@@ -1,5 +1,6 @@
 import type { BackRule, Block, Filter, Find, Match, Measure, RuleStatus, Rules, Want } from './config.ts'
 import type { EventRecord } from './events.ts'
+import { valuesIn } from './values.ts'
 
 export type CardStatus = RuleStatus | 'unknown'
 /** `good-carry`: a day without events that is still fine; `logged`: a value with nothing to judge it by. */
@@ -112,10 +113,10 @@ function measureValue(measure: Measure, inSpan: EventRecord[], history: EventRec
     case 'times':
       return inSpan.length
     case 'total':
-      return inSpan.reduce((sum, e) => sum + Math.max(0, Number(e.facts[measure.fact] ?? 0) || 0), 0)
+      return inSpan.reduce((sum, e) => sum + valuesIn(e.facts, measure.unit).reduce((a, v) => a + Math.max(0, v), 0), 0)
     case 'last': {
-      const hit = inSpan.findLast((e) => typeof e.facts[measure.fact] === 'number')
-      return hit ? (hit.facts[measure.fact] as number) : null
+      const hit = inSpan.findLast((e) => valuesIn(e.facts, measure.unit).length > 0)
+      return hit ? valuesIn(hit.facts, measure.unit)[0]! : null
     }
     case 'since':
       return Math.round((dayStart - localMidnight(history.at(-1)!.eventAt)) / 86400)

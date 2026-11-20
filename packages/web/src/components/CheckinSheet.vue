@@ -5,10 +5,11 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
+import { PAD_ROWS } from '../plugins/index.ts'
 import { absoluteTime, relativeTime } from '../time.ts'
-import NumberInput from './NumberInput.vue'
 import TagPicker from './TagPicker.vue'
 import TimeOffsetPopup from './TimeOffsetPopup.vue'
+import ValuePad from './ValuePad.vue'
 
 export interface SheetCard {
   id: string
@@ -45,22 +46,52 @@ const { data: inputs } = useQuery({
   },
 })
 /** Null until this card's inputs load. */
-const values = ref<Record<string, number | string | null> | null>(null)
-let initialValues = ''
+const choices = ref<Record<string, string | null> | null>(null)
+/** The number each picked value tag, and each of the card's own value tags, carries; null when left blank. */
+const amounts = ref<Record<string, number | null>>({})
+/** The tag whose number the keypad is setting. */
+const pad = ref<string | null>(null)
+let initialAmounts = ''
 watch(
   inputs,
   (list) => {
-    if (!list || values.value !== null) return
-    values.value = Object.fromEntries(
-      list.map((i) => [i.key, i.kind === 'number' ? (i.initial === 'last' ? (typeof i.last === 'number' ? i.last : null) : (i.initial ?? null)) : null]),
-    )
-    initialValues = JSON.stringify(values.value)
+    if (!list || choices.value !== null) return
+    choices.value = Object.fromEntries(list.choices.map((i) => [i.key, null]))
+    for (const v of list.values) if (v.auto || tags.value?.includes(v.tag)) amounts.value[v.tag] = v.default
+    initialAmounts = JSON.stringify(amounts.value)
+    pad.value = list.values.find((v) => v.auto && v.open)?.tag ?? null
   },
   { immediate: true },
 )
-const missing = computed(() => (inputs.value ?? []).filter((i) => i.required && values.value?.[i.key] == null).map((i) => i.name))
+const specOf = computed(() => new Map((inputs.value?.values ?? []).map((v) => [v.tag, v])))
+const autoValues = computed(() => (inputs.value?.values ?? []).filter((v) => v.auto))
+
+// Picking a value tag puts in its default; dropping it drops the number.
+watch(tags, (next, prev) => {
+  const now = new Set(next ?? [])
+  for (const tag of now) if (!(tag in amounts.value) && specOf.value.has(tag)) amounts.value[tag] = specOf.value.get(tag)!.default
+  for (const tag of prev ?? []) if (!now.has(tag) && !specOf.value.get(tag)?.auto) delete amounts.value[tag]
+})
+
+function setAmount(tag: string, value: number | null) {
+  amounts.value[tag] = value
+  if (!specOf.value.get(tag)?.auto && !(tags.value ?? []).includes(tag)) tags.value = [...(tags.value ?? []), tag]
+  pad.value = null
+}
+function dropAmount(tag: string) {
+  if (specOf.value.get(tag)?.auto) amounts.value[tag] = null
+  else tags.value = (tags.value ?? []).filter((t) => t !== tag)
+  pad.value = null
+}
+const padValue = computed(() => (pad.value === null ? null : pad.value in amounts.value ? amounts.value[pad.value]! : (specOf.value.get(pad.value)?.default ?? null)))
+const amountText = (tag: string) => {
+  const v = amounts.value[tag]
+  return v === null || v === undefined ? '—' : v.toFixed(specOf.value.get(tag)!.decimals)
+}
+
+const missing = computed(() => (inputs.value?.choices ?? []).filter((i) => i.required && choices.value?.[i.key] == null).map((i) => i.name))
 function pick(key: string, value: string) {
-  values.value![key] = values.value![key] === value ? null : value
+  choices.value![key] = choices.value![key] === value ? null : value
 }
 
 const dirty = computed(
@@ -68,7 +99,8 @@ const dirty = computed(
     note.value.trim() !== '' ||
     happenedAt.value !== null ||
     (tags.value !== null && [...tags.value].sort().join('\n') !== initialTags) ||
-    (values.value !== null && JSON.stringify(values.value) !== initialValues),
+    (choices.value !== null && Object.values(choices.value).some((v) => v !== null)) ||
+    JSON.stringify(amounts.value) !== initialAmounts,
 )
 
 const editing = ref(false)
@@ -78,7 +110,9 @@ const queryClient = useQueryClient()
 const submit = useMutation({
   mutationFn: async () => {
     const timeOffset = happenedAt.value === null ? 0 : Math.min(0, Math.round((happenedAt.value - Date.now()) / 1000))
-    const facts = Object.fromEntries(Object.entries(values.value ?? {}).filter((e): e is [string, number | string] => e[1] != null))
+    const facts: Record<string, number | string> = {}
+    for (const [key, v] of Object.entries(choices.value ?? {})) if (v !== null) facts[key] = v
+    for (const [tag, v] of Object.entries(amounts.value)) if (v !== null) facts[`${tag}:${specOf.value.get(tag)!.unit}`] = v
     const res = await api.checkin.$post({ json: { cardId: props.card.id, note: note.value, tags: tags.value ?? [], timeOffset, facts } })
     if (!res.ok) throw new Error(t('sheet.submitFailed', { status: res.status }))
   },
@@ -119,6 +153,7 @@ function onTransitionEnd(e: TransitionEvent) {
 function onKeydown(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
   if (timePopup.value) timePopup.value = false
+  else if (pad.value) pad.value = null
   else if (confirming.value) confirming.value = false
   else requestClose()
 }
@@ -162,32 +197,40 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               {{ timeLabel }}<ChevronRight :size="18" class="text-zinc-400" />
             </span>
           </button>
-          <template v-for="input in values ? (inputs ?? []) : []" :key="input.key">
-            <NumberInput
-              v-if="input.kind === 'number'"
-              :input="input"
-              :model-value="values?.[input.key] as number | null"
-              @update:model-value="values![input.key] = $event"
-            />
-            <div v-else class="mt-3 mb-1">
-              <p class="mb-1.5 text-sm text-zinc-500">
-                {{ input.name }}<span v-if="!input.required"> · {{ t('fact.optional') }}</span>
-              </p>
-              <div class="grid gap-1.5" :style="{ gridTemplateColumns: `repeat(${input.options.length}, 1fr)` }">
-                <button
-                  v-for="o in input.options"
-                  :key="o.value"
-                  class="choice"
-                  :class="{ on: values?.[input.key] === o.value }"
-                  @click="pick(input.key, o.value)"
-                >
-                  <span class="text-[26px] leading-none">{{ o.value }}</span>
-                  <span class="text-xs">{{ o.label }}</span>
-                </button>
-              </div>
+          <div v-if="autoValues.length" class="mt-3 flex flex-wrap gap-2">
+            <span v-for="v in autoValues" :key="v.tag" class="vchip" :class="{ active: pad === v.tag }">
+              <span class="vname">{{ v.tag }}</span>
+              <button class="vamount" @click="pad = v.tag">{{ amountText(v.tag) }}<small>{{ v.unit }}</small></button>
+            </span>
+          </div>
+          <div v-for="input in choices ? (inputs?.choices ?? []) : []" :key="input.key" class="mt-3 mb-1">
+            <p class="mb-1.5 text-sm text-zinc-500">
+              {{ input.name }}<span v-if="!input.required"> · {{ t('fact.optional') }}</span>
+            </p>
+            <div class="grid gap-1.5" :style="{ gridTemplateColumns: `repeat(${input.options.length}, 1fr)` }">
+              <button
+                v-for="o in input.options"
+                :key="o.value"
+                class="choice"
+                :class="{ on: choices?.[input.key] === o.value }"
+                @click="pick(input.key, o.value)"
+              >
+                <span class="text-[26px] leading-none">{{ o.value }}</span>
+                <span class="text-xs">{{ o.label }}</span>
+              </button>
             </div>
-          </template>
-          <TagPicker ref="picker" :card-id="card.id" :editing="editing" :model-value="tags" @update:model-value="onTags" />
+          </div>
+          <TagPicker
+            ref="picker"
+            :card-id="card.id"
+            :editing="editing"
+            :model-value="tags"
+            :values="inputs?.values ?? []"
+            :amounts="amounts"
+            :active-value="pad"
+            @update:model-value="onTags"
+            @value="pad = $event"
+          />
           <textarea
             v-model="note"
             rows="4"
@@ -195,7 +238,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             class="mt-4 w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
           />
         </div>
-        <footer class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <ValuePad
+          v-if="pad && specOf.get(pad)"
+          :key="pad"
+          :input="specOf.get(pad)!"
+          :label="pad"
+          :value="padValue"
+          :row="specOf.get(pad)!.auto ? PAD_ROWS[card.id] : undefined"
+          @done="setAmount(pad!, $event)"
+          @remove="dropAmount(pad!)"
+          @cancel="pad = null"
+        />
+        <footer v-else class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <div v-if="editing" class="grid grid-cols-2 gap-3">
             <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="picker?.addGroup()">{{ t('sheet.addGroup') }}</button>
             <button class="h-12 rounded-xl bg-indigo-600 font-semibold text-white" @click="editing = false">{{ t('common.done') }}</button>
@@ -209,7 +263,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
               <button
                 class="h-12 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
-                :disabled="values === null || missing.length > 0 || submit.isPending.value || leaving"
+                :disabled="choices === null || missing.length > 0 || submit.isPending.value || leaving"
                 @click="submit.mutate()"
               >
                 {{ t('sheet.submit') }}
@@ -253,5 +307,44 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   background: #eef2ff;
   color: #3730a3;
   font-weight: 600;
+}
+.vchip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 2px solid #667eea;
+  border-radius: 12px;
+  background: #667eea;
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 500;
+  overflow: hidden;
+}
+.vchip .vname {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 10px 8px 12px;
+}
+.vchip .vamount {
+  position: relative;
+  min-width: 44px;
+  padding: 8px 10px;
+  border-left: 1px solid rgb(255 255 255 / 0.35);
+  background: #5a67d8;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.vchip .vamount small {
+  margin-left: 2px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+.vchip .vamount::after {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+.vchip.active {
+  outline: 2px solid #312e81;
+  outline-offset: 1px;
 }
 </style>

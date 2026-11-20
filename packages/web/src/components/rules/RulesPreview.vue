@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { dayStarts, evaluateNow } from 'server/rules'
+import { valuesIn } from 'server/values'
 import { Calendar, Clock } from 'lucide-vue-next'
 import { computed, type Component } from 'vue'
 import { locale, t, type MessageKey } from '../../i18n/index.ts'
@@ -19,16 +20,16 @@ const weekdays = computed(() =>
 
 const decimals = computed(() => {
   const measure = draft.value.back?.measure
-  return measure && 'fact' in measure ? (data.facts.find((f) => f.key === measure.fact)?.decimals ?? 0) : 0
+  return measure && 'unit' in measure ? (data.units.find((u) => u.unit === measure.unit)?.decimals ?? 0) : 0
 })
 
 /** Without a looking-back rule the report only marks days with records, showing the day's last number if the card keeps one. */
 function loggedDay(start: number, end: number) {
   const list = counted(draft.value.find).filter((e) => e.eventAt >= start && e.eventAt < end)
   if (!list.length) return { state: 'none', value: '' }
-  const fact = data.facts[0]
-  const last = fact ? list.findLast((e) => typeof e.facts[fact.key] === 'number')?.facts[fact.key] : undefined
-  return { state: 'logged', value: typeof last === 'number' ? last.toFixed(fact!.decimals) : fact ? '' : String(list.length) }
+  const unit = data.units[0]
+  const last = unit ? list.map((e) => valuesIn(e.facts, unit.unit)[0]).findLast((v) => v !== undefined) : undefined
+  return { state: 'logged', value: last !== undefined ? last.toFixed(unit!.decimals) : unit ? '' : String(list.length) }
 }
 
 const calendar = computed(() => {
