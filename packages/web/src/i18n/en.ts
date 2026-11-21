@@ -151,6 +151,7 @@ export default {
   'journal.empty': 'Nothing recorded this day',
   'journal.backdated': 'Late',
   'journal.calendar': 'Calendar',
+  'journal.finder': 'Gallery, calendar and search',
   'journal.prevMonth': 'Previous month',
   'journal.nextMonth': 'Next month',
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-vue-next'
 import type { CardConfig } from 'server/config'
 import { PURE_CARD } from 'server/pure'
 import { parseValueKey } from 'server/values'
@@ -126,14 +126,12 @@ function edit(row: (typeof rows.value)[number]) {
 
 const finding = ref(false)
 function pickDay(key: string) {
-  finding.value = false
   goTo(key)
 }
 
 /** The entry a search result or gallery picture pointed at: its day opens and it lights up once in view. */
 const flash = ref<number | null>(null)
 function jump(eventId: number, eventAt: number) {
-  finding.value = false
   flash.value = eventId
   goTo(dayKey(new Date(eventAt * 1000)))
 }
@@ -208,7 +206,7 @@ watch([flash, rows], async ([id]) => {
       </ol>
     </div>
 
-    <button class="fab" :aria-label="t('journal.calendar')" @click="finding = true"><CalendarDays :size="24" /></button>
+    <button class="fab" :aria-label="t('journal.finder')" @click="finding = true"><LayoutDashboard :size="24" /></button>
 
     <JournalFinder v-if="finding" :day="day" @pick="pickDay" @jump="jump" @close="finding = false" />
     <CheckinSheet

@@ -150,6 +150,7 @@ export default {
   'journal.empty': '這天沒有紀錄',
   'journal.backdated': '補',
   'journal.calendar': '月曆',
+  'journal.finder': '圖庫、月曆與搜尋',
   'journal.prevMonth': '上個月',
   'journal.nextMonth': '下個月',
 

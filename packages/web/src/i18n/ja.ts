@@ -151,6 +151,7 @@ export default {
   'journal.empty': 'この日の記録はありません',
   'journal.backdated': '後記',
   'journal.calendar': 'カレンダー',
+  'journal.finder': 'ギャラリー・カレンダー・検索',
   'journal.prevMonth': '前の月',
   'journal.nextMonth': '次の月',
 

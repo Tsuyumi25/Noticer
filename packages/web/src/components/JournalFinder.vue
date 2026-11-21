@@ -7,21 +7,38 @@ import { api } from '../api.ts'
 import { isVideo, isVisual, previewUrl } from '../attachments.ts'
 import { locale, t, tn, type MessageKey } from '../i18n/index.ts'
 import { clock } from '../time.ts'
+import { useSheetDrag } from '../sheetDrag.ts'
 import { openViewer } from '../viewer.ts'
 import AttachmentIcon from './AttachmentIcon.vue'
 import JournalCalendar from './JournalCalendar.vue'
 
-/** Finding a day or an entry: the calendar opens first; search and the gallery sit beside it. */
+/** Finding a picture, a day or an entry: the gallery opens first; the calendar and search sit beside it. */
 const props = defineProps<{ day: Date }>()
 const emit = defineEmits<{ pick: [day: string]; jump: [eventId: number, eventAt: number]; close: [] }>()
 
 type Tab = 'calendar' | 'search' | 'gallery'
 const tabs: { key: Tab; icon: Component; label: MessageKey }[] = [
+  { key: 'gallery', icon: Images, label: 'finder.gallery' },
   { key: 'calendar', icon: CalendarDays, label: 'journal.calendar' },
   { key: 'search', icon: Search, label: 'finder.search' },
-  { key: 'gallery', icon: Images, label: 'finder.gallery' },
 ]
-const tab = ref<Tab>('calendar')
+const tab = ref<Tab>('gallery')
+
+const { sheet, sheetStyle, backdrop, animated, leave, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } = useSheetDrag({ onRequestClose: () => leave() })
+// The sheet keeps its rounded top at rest; only its slide comes from the drag.
+const slide = computed(() => ({ transform: sheetStyle.value.transform }))
+function onTransitionEnd(e: TransitionEvent) {
+  if (isLeaveEnd(e)) emit('close')
+}
+/** The journal moves to what was picked while the sheet slides away. */
+function pick(day: string) {
+  emit('pick', day)
+  leave()
+}
+function jump(eventId: number, eventAt: number) {
+  emit('jump', eventId, eventAt)
+  leave()
+}
 
 const { data: config } = useQuery({
   queryKey: ['config'],
@@ -102,13 +119,13 @@ function view(index: number) {
   void openViewer(list, index, {
     showInJournal: (at) => {
       const item = list[at]
-      if (item) emit('jump', item.eventId, item.eventAt)
+      if (item) jump(item.eventId, item.eventAt)
     },
   })
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && !document.querySelector('.pswp')) emit('close')
+  if (e.key === 'Escape' && !document.querySelector('.pswp')) leave()
 }
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
@@ -116,12 +133,20 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-40 flex items-end bg-black/30" @click.self="emit('close')">
+    <div class="fixed inset-0 z-40 flex items-end">
+      <div class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" @click="leave()" />
       <section
+        ref="sheet"
         role="dialog"
         :aria-label="t(tabs.find((x) => x.key === tab)!.label)"
-        class="mx-auto flex w-full max-w-2xl flex-col rounded-t-2xl bg-white pt-1 shadow-xl"
-        :class="tab === 'calendar' ? 'pb-[calc(0.75rem+env(safe-area-inset-bottom))]' : 'h-[calc(100dvh-56px)]'"
+        class="relative mx-auto flex w-full max-w-2xl flex-col rounded-t-2xl bg-white pt-1 shadow-xl"
+        :class="[tab === 'calendar' ? 'pb-[calc(0.75rem+env(safe-area-inset-bottom))]' : 'h-[calc(100dvh-56px)]', { 'sheet-animated': animated }]"
+        :style="slide"
+        @touchstart="onTouchStart"
+        @touchmove="onTouchMove"
+        @touchend="onTouchEnd"
+        @touchcancel="onTouchEnd"
+        @transitionend="onTransitionEnd"
       >
         <div class="mx-auto mt-1 mb-1.5 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
         <div class="seg mx-3 mb-2 shrink-0" role="tablist">
@@ -130,7 +155,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </button>
         </div>
 
-        <JournalCalendar v-if="tab === 'calendar'" :day="props.day" @pick="emit('pick', $event)" />
+        <JournalCalendar v-if="tab === 'calendar'" :day="props.day" @pick="pick" />
 
         <template v-else-if="tab === 'search'">
           <div class="shrink-0 px-3 pb-2">
@@ -139,7 +164,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
             <p v-if="query && !searching && found?.length === 0" class="py-10 text-center text-sm text-zinc-400">{{ t('finder.noResults') }}</p>
             <p v-else-if="total" class="px-3 pb-1 text-xs text-zinc-500">{{ tn('finder.results', total) }}</p>
-            <button v-for="e in found ?? []" :key="e.id" class="result" @click="emit('jump', e.id, e.eventAt)">
+            <button v-for="e in found ?? []" :key="e.id" class="result" @click="jump(e.id, e.eventAt)">
               <span class="node">{{ emojiOf(e.cardId) }}</span>
               <span class="min-w-0">
                 <span class="block text-xs text-zinc-500">{{ dateTime(e.eventAt) }}</span>
