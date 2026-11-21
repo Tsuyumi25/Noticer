@@ -36,8 +36,13 @@ async function slideOf(a: Attachment): Promise<SlideData> {
   return { src: fileUrl(a), ...size, ...(a.thumb ? { msrc: thumbUrl(a) } : {}), alt: a.name }
 }
 
-/** Opens an event's attachments over the whole screen, at `index`: swipe between them, pinch to zoom, drag down to close. */
-export async function openViewer(attachments: Attachment[], index: number) {
+interface ViewerOptions {
+  /** Offers a button that closes the viewer and shows the current attachment's entry in the journal. */
+  showInJournal?: (index: number) => void
+}
+
+/** Opens attachments over the whole screen, at `index`: swipe between them, pinch to zoom, drag down to close. */
+export async function openViewer(attachments: Attachment[], index: number, { showInJournal }: ViewerOptions = {}) {
   const pswp = new PhotoSwipe({
     dataSource: await Promise.all(attachments.map(slideOf)),
     index,
@@ -54,6 +59,19 @@ export async function openViewer(attachments: Attachment[], index: number) {
   // The video's own controls take the touch instead of the swipe.
   pswp.addFilter('preventPointerEvent', (prevent, e) => (e.target instanceof Element && e.target.closest('video') ? false : prevent))
   pswp.on('uiRegister', () => {
+    if (showInJournal) {
+      pswp.ui?.registerElement({
+        name: 'journal',
+        appendTo: 'root',
+        isButton: true,
+        html: escape(t('attach.showInJournal')),
+        onClick: (_, __, viewer) => {
+          const at = viewer.currIndex
+          viewer.close()
+          showInJournal(at)
+        },
+      })
+    }
     pswp.ui?.registerElement({
       name: 'download',
       order: 8,

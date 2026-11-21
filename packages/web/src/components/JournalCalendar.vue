@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
 import { dayKey } from '../time.ts'
 
 const props = defineProps<{ day: Date }>()
-const emit = defineEmits<{ pick: [day: string]; close: [] }>()
+const emit = defineEmits<{ pick: [day: string] }>()
 
 const month = ref(new Date(props.day.getFullYear(), props.day.getMonth(), 1))
 const today = new Date()
@@ -48,50 +48,36 @@ const { data: counts } = useQuery({
 })
 
 const selected = computed(() => dayKey(props.day))
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
-}
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-40 flex items-end bg-black/30" @click.self="emit('close')">
-      <section
-        role="dialog"
-        :aria-label="t('journal.calendar')"
-        class="mx-auto w-full max-w-2xl rounded-t-2xl bg-white px-2 pt-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-xl"
+  <div class="px-2">
+    <header class="flex items-center justify-between">
+      <button class="nav" :aria-label="t('journal.prevMonth')" @click="shift(-1)"><ChevronLeft :size="22" /></button>
+      <h2 class="text-[17px] font-semibold">{{ title }}</h2>
+      <button class="nav" :aria-label="t('journal.nextMonth')" :disabled="month.getTime() >= thisMonth" @click="shift(1)">
+        <ChevronRight :size="22" />
+      </button>
+    </header>
+    <div class="grid grid-cols-7 gap-0.5">
+      <span v-for="w in weekdays" :key="w" class="pb-1 text-center text-[11px] text-zinc-400">{{ w }}</span>
+      <button
+        v-for="cell in cells"
+        :key="cell.getTime()"
+        class="cell"
+        :class="{
+          out: cell.getMonth() !== month.getMonth(),
+          on: dayKey(cell) === selected,
+          today: dayKey(cell) === todayKey,
+        }"
+        :disabled="dayKey(cell) > todayKey"
+        @click="emit('pick', dayKey(cell))"
       >
-        <header class="flex items-center justify-between">
-          <button class="nav" :aria-label="t('journal.prevMonth')" @click="shift(-1)"><ChevronLeft :size="22" /></button>
-          <h2 class="text-[17px] font-semibold">{{ title }}</h2>
-          <button class="nav" :aria-label="t('journal.nextMonth')" :disabled="month.getTime() >= thisMonth" @click="shift(1)">
-            <ChevronRight :size="22" />
-          </button>
-        </header>
-        <div class="grid grid-cols-7 gap-0.5">
-          <span v-for="w in weekdays" :key="w" class="pb-1 text-center text-[11px] text-zinc-400">{{ w }}</span>
-          <button
-            v-for="cell in cells"
-            :key="cell.getTime()"
-            class="cell"
-            :class="{
-              out: cell.getMonth() !== month.getMonth(),
-              on: dayKey(cell) === selected,
-              today: dayKey(cell) === todayKey,
-            }"
-            :disabled="dayKey(cell) > todayKey"
-            @click="emit('pick', dayKey(cell))"
-          >
-            <b>{{ cell.getDate() }}</b>
-            <i>{{ counts?.get(dayKey(cell)) ?? '' }}</i>
-          </button>
-        </div>
-      </section>
+        <b>{{ cell.getDate() }}</b>
+        <i>{{ counts?.get(dayKey(cell)) ?? '' }}</i>
+      </button>
     </div>
-  </Teleport>
+  </div>
 </template>
 
 <style scoped>

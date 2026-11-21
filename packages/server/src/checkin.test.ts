@@ -157,11 +157,15 @@ describe('editing an event', () => {
 })
 
 describe('attachments', () => {
-  const attachmentSchema = z.object({ id: z.string(), name: z.string(), type: z.string(), size: z.number(), thumb: z.boolean() })
-  async function upload(app: ReturnType<typeof setup>['app'], name: string, type: string, body: string, thumb?: string) {
+  const attachmentSchema = z.object({ id: z.string(), name: z.string(), type: z.string(), size: z.number(), thumb: z.boolean(), width: z.number().nullable(), height: z.number().nullable() })
+  async function upload(app: ReturnType<typeof setup>['app'], name: string, type: string, body: string, thumb?: string, size?: { width: number; height: number }) {
     const form = new FormData()
     form.set('file', new File([body], name, { type }))
     if (thumb !== undefined) form.set('thumb', new File([thumb], 'thumb.jpg', { type: 'image/jpeg' }))
+    if (size) {
+      form.set('width', String(size.width))
+      form.set('height', String(size.height))
+    }
     const res = await app.request('/api/attachments', { method: 'POST', body: form })
     expect(res.status).toBe(201)
     return attachmentSchema.parse(await res.json())
@@ -169,12 +173,12 @@ describe('attachments', () => {
 
   it('keep any file with a checkin, in order, and send it back whole or by byte range', async () => {
     const { db, send, app } = setup()
-    const photo = await upload(app, '午餐.jpg', 'image/jpeg', 'jpeg-bytes', 'small')
+    const photo = await upload(app, '午餐.jpg', 'image/jpeg', 'jpeg-bytes', 'small', { width: 1200, height: 900 })
     const archive = await upload(app, '收據.zip', 'application/zip', '0123456789')
     await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], attachments: [archive.id, photo.id] })
     expect(allEvents(db)[0]?.attachments).toEqual([
-      { id: archive.id, name: '收據.zip', type: 'application/zip', size: 10, thumb: false },
-      { id: photo.id, name: '午餐.jpg', type: 'image/jpeg', size: 10, thumb: true },
+      { id: archive.id, name: '收據.zip', type: 'application/zip', size: 10, thumb: false, width: null, height: null },
+      { id: photo.id, name: '午餐.jpg', type: 'image/jpeg', size: 10, thumb: true, width: 1200, height: 900 },
     ])
     const whole = await app.request(`/api/attachments/${photo.id}`)
     expect(whole.headers.get('content-type')).toBe('image/jpeg')
@@ -217,6 +221,51 @@ describe('attachments', () => {
     expect((await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], attachments: [taken.id] })).status).toBe(400)
     expect((await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], attachments: ['nope'] })).status).toBe(400)
     expect(allEvents(db)).toHaveLength(1)
+  })
+
+  it('list every picture and video, newest event first, leaving other files out', async () => {
+    const { send, app } = setup()
+    const older = await upload(app, 'a.jpg', 'image/jpeg', 'a', 't')
+    const zip = await upload(app, 'b.zip', 'application/zip', 'b')
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], timeOffset: -3600, attachments: [older.id, zip.id] })
+    const clip = await upload(app, 'c.webm', 'video/webm', 'c')
+    const photo = await upload(app, 'd.png', 'image/png', 'd')
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], attachments: [clip.id, photo.id] })
+    const media = z.array(attachmentSchema.extend({ eventId: z.number(), eventAt: z.number() })).parse(await (await send('GET', '/api/media')).json())
+    expect(media.map((m) => m.name)).toEqual(['c.webm', 'd.png', 'a.jpg'])
+  })
+})
+
+describe('search', () => {
+  const pageSchema = z.object({
+    events: z.array(z.object({ note: z.string().nullable(), tags: z.array(z.string()) })),
+    total: z.number().nullable(),
+    next: z.object({ eventAt: z.number(), id: z.number() }).nullable(),
+  })
+  const page = async (send: ReturnType<typeof setup>['send'], query: string) => pageSchema.parse(await (await send('GET', `/api/search?${query}`)).json())
+
+  it('finds a word in notes or tags, newest first, taking % and _ literally', async () => {
+    const { send } = setup()
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '試用新的乳液', tags: [], timeOffset: -7200 })
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: ['乳液'], timeOffset: -3600 })
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '100% 天然', tags: [] })
+    await send('POST', '/api/checkin', { cardId: 'weight', note: '一般', tags: [] })
+    const find = async (q: string) => (await page(send, `q=${encodeURIComponent(q)}`)).events
+    expect((await find('乳液')).map((e) => e.note)).toEqual([null, '試用新的乳液'])
+    expect((await find('%')).map((e) => e.note)).toEqual(['100% 天然'])
+    expect(await find('_')).toEqual([])
+    expect((await send('GET', '/api/search?q=%20')).status).toBe(400)
+  })
+
+  it('hands every match out page by page, each page picking up just older than the last, with the count up front', async () => {
+    const { send } = setup()
+    for (const hours of [5, 4, 3, 2, 1]) await send('POST', '/api/checkin', { cardId: 'skincare', note: `第${hours}次乳液`, tags: [], timeOffset: -hours * 3600 })
+    const first = await page(send, 'q=乳液&limit=2')
+    expect(first).toMatchObject({ total: 5, events: [{ note: '第1次乳液' }, { note: '第2次乳液' }] })
+    const second = await page(send, `q=乳液&limit=2&after=${first.next!.eventAt}:${first.next!.id}`)
+    expect(second).toMatchObject({ total: null, events: [{ note: '第3次乳液' }, { note: '第4次乳液' }] })
+    const last = await page(send, `q=乳液&limit=2&after=${second.next!.eventAt}:${second.next!.id}`)
+    expect(last).toMatchObject({ events: [{ note: '第5次乳液' }], next: null })
   })
 })
 

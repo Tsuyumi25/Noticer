@@ -8,7 +8,7 @@ import { rootUnits, rulesSchema, tagGroupsSchema, valueSpecSchema, type Config, 
 import { PURE_CARD } from './pure.ts'
 import { buildDashboard } from './dashboard.ts'
 import type { DB } from './db.ts'
-import { listEvents } from './events.ts'
+import { listEvents, listMedia, searchEvents } from './events.ts'
 import { cardInputs, readFacts, type FactRow } from './facts.ts'
 import { cardCalendar, reportCounts } from './review.ts'
 import { analyzeSleep } from './sleep-analysis.ts'
@@ -25,6 +25,20 @@ const rangeQuery = z
   .refine((q) => q.from < q.to, { message: 'from must be before to' })
 
 const dashboardQuery = z.object({ at: z.coerce.number().int().optional() })
+
+const searchQuery = z.object({
+  q: z.string().trim().min(1),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  /** The `next` of the page before: `eventAt:id`. */
+  after: z
+    .string()
+    .regex(/^-?\d+:\d+$/)
+    .transform((s) => {
+      const [eventAt, id] = s.split(':').map(Number)
+      return { eventAt: eventAt!, id: id! }
+    })
+    .optional(),
+})
 
 const sleepAnalysisQuery = z.object({
   days: z.coerce.number().int().min(30).max(730).default(365),
@@ -103,6 +117,11 @@ const api = new Hono<Env>()
     const { from, to } = c.req.valid('query')
     return c.json(listEvents(c.var.db, from, to))
   })
+  .get('/search', zValidator('query', searchQuery), (c) => {
+    const { q, limit, after } = c.req.valid('query')
+    return c.json(searchEvents(c.var.db, q, limit, after ?? null))
+  })
+  .get('/media', (c) => c.json(listMedia(c.var.db)))
   .get('/dashboard', zValidator('query', dashboardQuery), (c) => {
     const now = c.req.valid('query').at ?? Math.floor(Date.now() / 1000)
     return c.json(buildDashboard(c.var.store.read(), listEvents(c.var.db, 0, now + 1), now))

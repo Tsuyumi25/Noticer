@@ -92,7 +92,7 @@ const dirty = computed(
 
 const queryClient = useQueryClient()
 function refresh() {
-  for (const key of ['dashboard', 'events', 'cardTags', 'rootTags', 'pure']) queryClient.invalidateQueries({ queryKey: [key] })
+  for (const key of ['dashboard', 'events', 'cardTags', 'rootTags', 'pure', 'media', 'search']) queryClient.invalidateQueries({ queryKey: [key] })
   queryClient.invalidateQueries({ queryKey: ['calendar'], refetchType: 'all' })
   queryClient.invalidateQueries({ queryKey: ['sleepAnalysis'], refetchType: 'all' })
   leave()

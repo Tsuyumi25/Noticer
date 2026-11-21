@@ -4,7 +4,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import type { CardConfig } from 'server/config'
 import { PURE_CARD } from 'server/pure'
 import { parseValueKey } from 'server/values'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.ts'
 import CheckinSheet, { type SheetEvent } from '../components/CheckinSheet.vue'
@@ -12,7 +12,7 @@ import QuickNoteSheet from '../components/QuickNoteSheet.vue'
 import AttachmentIcon from '../components/AttachmentIcon.vue'
 import { isVideo, isVisual, previewUrl } from '../attachments.ts'
 import { openViewer } from '../viewer.ts'
-import JournalCalendar from '../components/JournalCalendar.vue'
+import JournalFinder from '../components/JournalFinder.vue'
 import { useDaySwipe } from '../daySwipe.ts'
 import { t, tn } from '../i18n/index.ts'
 import { cardColor, tagColors } from '../tagColors.ts'
@@ -124,11 +124,27 @@ function edit(row: (typeof rows.value)[number]) {
   else if (row.card) editing.value = { card: row.card, event: row.event }
 }
 
-const calendar = ref(false)
+const finding = ref(false)
 function pickDay(key: string) {
-  calendar.value = false
+  finding.value = false
   goTo(key)
 }
+
+/** The entry a search result or gallery picture pointed at: its day opens and it lights up once in view. */
+const flash = ref<number | null>(null)
+function jump(eventId: number, eventAt: number) {
+  finding.value = false
+  flash.value = eventId
+  goTo(dayKey(new Date(eventAt * 1000)))
+}
+watch([flash, rows], async ([id]) => {
+  if (id === null || !rows.value.some((r) => r.event.id === id)) return
+  await nextTick()
+  document.querySelector(`[data-event="${id}"]`)?.scrollIntoView({ block: 'center' })
+  setTimeout(() => {
+    if (flash.value === id) flash.value = null
+  }, 1600)
+})
 </script>
 
 <template>
@@ -147,7 +163,7 @@ function pickDay(key: string) {
       <ol v-else class="timeline">
         <template v-for="row in rows" :key="row.event.id">
           <li v-if="row.gapHours" class="gap" aria-hidden="true">{{ tn('time.hours', row.gapHours) }}</li>
-          <li class="row" :style="{ '--c': row.color }" role="button" tabindex="0" @click="edit(row)" @keydown.enter="edit(row)">
+          <li class="row" :class="{ flash: flash === row.event.id }" :data-event="row.event.id" :style="{ '--c': row.color }" role="button" tabindex="0" @click="edit(row)" @keydown.enter="edit(row)">
             <div class="time">
               {{ clock(row.event.eventAt * 1000) }}
               <span v-if="row.event.timeOffset < 0" class="late">{{ t('journal.backdated') }}</span>
@@ -192,9 +208,9 @@ function pickDay(key: string) {
       </ol>
     </div>
 
-    <button class="fab" :aria-label="t('journal.calendar')" @click="calendar = true"><CalendarDays :size="24" /></button>
+    <button class="fab" :aria-label="t('journal.calendar')" @click="finding = true"><CalendarDays :size="24" /></button>
 
-    <JournalCalendar v-if="calendar" :day="day" @pick="pickDay" @close="calendar = false" />
+    <JournalFinder v-if="finding" :day="day" @pick="pickDay" @jump="jump" @close="finding = false" />
     <CheckinSheet
       v-if="editing"
       :key="editing.event.id"
@@ -226,6 +242,15 @@ function pickDay(key: string) {
 }
 .timeline {
   padding: 6px 10px 96px;
+}
+.row.flash {
+  animation: flash 1.6s ease-out;
+}
+@keyframes flash {
+  0%,
+  40% {
+    background: #fef08a;
+  }
 }
 .row {
   position: relative;

@@ -70,3 +70,16 @@
 .pswp__button--download .pswp__icn path {
   stroke: var(--pswp-icon-color);
 }
+.pswp__button--journal {
+  position: absolute;
+  right: 16px;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  left: 16px;
+  width: auto !important;
+  height: 48px !important;
+  border-radius: 12px;
+  background: white !important;
+  color: #18181b !important;
+  font-weight: 600;
+  opacity: 1 !important;
+}
