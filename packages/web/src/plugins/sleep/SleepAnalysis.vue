@@ -21,6 +21,8 @@ const DATE_ROW = 16
 const AXIS_WIDTH = 44
 const DAYS_PER_SCREEN = 31
 const HOUR_LINES = [0, 4, 8, 12, 16, 20, 24]
+/** Each column runs from this hour to the same hour next day, so a night's sleep stays in one piece. */
+const CUT_HOUR = 18
 
 /** Upper bounds in hours, shortest first; past the last one is the longest colour. */
 const DURATION_COLORS: [number, string][] = [
@@ -46,22 +48,27 @@ const analysisOver = (days: number) => ({
 const { data, isPending, isError } = useQuery(analysisOver(ALL_DAYS))
 const { data: summary } = useQuery(computed(() => ({ ...analysisOver(range.value.days), placeholderData: (previous: typeof data.value) => previous })))
 
-const startOfLocalDay = (seconds: number) => {
-  const d = new Date(seconds * 1000)
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+/** Where the column holding this moment starts, in ms. */
+const columnOf = (seconds: number) => {
+  const d = new Date((seconds - CUT_HOUR * 3600) * 1000)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), CUT_HOUR).getTime()
+}
+const nextDay = (ms: number) => {
+  const d = new Date(ms)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, d.getHours()).getTime()
 }
 const shortDate = (ms: number) => new Intl.DateTimeFormat(locale.value, { month: 'numeric', day: 'numeric' }).format(ms)
 const pad = (n: number) => String(n).padStart(2, '0')
 const hhmm = (hour: number) => `${pad(Math.floor(hour) % 24)}:${pad(Math.round((hour % 1) * 60) % 60)}`
 const one = (n: number) => (Math.round(n * 10) / 10).toFixed(1)
 
-/** Each local day from the window's first to today, oldest first. */
+/** Each column from the window's first to the one holding now, oldest first. */
 const days = computed(() => {
-  const today = startOfLocalDay(Date.now() / 1000)
-  const first = data.value?.blocks[0] ? startOfLocalDay(data.value.blocks[0].onset) : today
+  const current = columnOf(Date.now() / 1000)
+  const first = data.value?.blocks[0] ? columnOf(data.value.blocks[0].onset) : current
   const list: number[] = []
   // Stepping by calendar date keeps daylight-saving days at their own length.
-  for (let d = new Date(first); d.getTime() <= today; d.setDate(d.getDate() + 1)) list.push(d.getTime())
+  for (let d = first; d <= current; d = nextDay(d)) list.push(d)
   return list
 })
 
@@ -81,27 +88,41 @@ const bars = computed(() => {
     out.push({ x: i * slot.value + (slot.value - barWidth) / 2, y: y(from), w: barWidth, h: Math.max(1.5, y(to) - y(from)), fill })
   }
   for (const b of data.value?.blocks ?? []) {
-    const day = startOfLocalDay(b.onset)
-    const start = (b.onset * 1000 - day) / 3_600_000
+    const column = columnOf(b.onset)
+    const start = (b.onset * 1000 - column) / 3_600_000
     const end = start + (b.offset - b.onset) / 3600
     const fill = colorOf(b.durationHours)
-    put(day, start, Math.min(24, end), fill)
-    if (end > 24) put(startOfLocalDay(b.offset), 0, end - 24, fill)
+    put(column, start, Math.min(24, end), fill)
+    if (end > 24) put(nextDay(column), 0, end - 24, fill)
   }
   return out
 })
 
-/** The normal night as bands on the 00–24 axis; a night across midnight becomes two. */
+/** The normal night as bands on the column's axis; one that wraps past the cut becomes two. */
 const nightBands = computed(() => {
   const night = data.value?.normalNight
   if (!night) return []
-  return night.from < night.to ? [[night.from, night.to]] : [[0, night.to], [night.from, 24]]
+  const from = (night.from - CUT_HOUR + 24) % 24
+  const to = (night.to - CUT_HOUR + 24) % 24
+  return from < to ? [[from, to]] : [[0, to], [from, 24]]
 })
 
+// A column is labelled with the day it wakes into, which holds most of its hours.
 const dateLabels = computed(() => {
   const step = Math.max(1, Math.ceil(36 / slot.value))
-  return days.value.flatMap((d, i) => (i % step ? [] : [{ x: i * slot.value + slot.value / 2, text: shortDate(d) }]))
+  return days.value.flatMap((d, i) => (i % step ? [] : [{ x: i * slot.value + slot.value / 2, text: shortDate(nextDay(d)) }]))
 })
+
+watch(
+  viewport,
+  (el, _, onCleanup) => {
+    if (!el) return
+    const observer = new ResizeObserver(() => (viewWidth.value = el.clientWidth))
+    observer.observe(el)
+    onCleanup(() => observer.disconnect())
+  },
+  { flush: 'post' },
+)
 
 // Open on the newest day, like the right edge of a calendar.
 watch(
@@ -109,9 +130,7 @@ watch(
   async () => {
     await nextTick()
     const el = viewport.value
-    if (!el) return
-    viewWidth.value = el.clientWidth
-    el.scrollLeft = el.scrollWidth
+    if (el) el.scrollLeft = el.scrollWidth
   },
   { flush: 'post' },
 )
@@ -142,7 +161,8 @@ const weekdays = computed(() =>
 
 /** From this month through the last forecast night, each day marked by whether it falls inside a window. */
 const forecastMonths = computed(() => {
-  const today = new Date(startOfLocalDay(Date.now() / 1000))
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const last = windows.value.reduce((latest, w) => (w.last > latest ? w.last : latest), today)
   const nightOf = new Map<number, { first: boolean; last: boolean }>()
   for (const w of windows.value) {
@@ -206,7 +226,7 @@ const nightLabel = computed(() => {
           </svg>
         </div>
         <div class="axis" :style="{ width: `${AXIS_WIDTH}px`, height: `${PLOT_HEIGHT}px` }">
-          <span v-for="h in HOUR_LINES" :key="h" :style="{ top: `${y(h)}px` }">{{ pad(h % 24) }}:00</span>
+          <span v-for="h in HOUR_LINES" :key="h" :style="{ top: `${y(h)}px` }">{{ pad((CUT_HOUR + h) % 24) }}:00</span>
         </div>
       </div>
     </div>
