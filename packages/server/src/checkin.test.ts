@@ -1,6 +1,10 @@
+import { existsSync, mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { createApp } from './app.ts'
+import { AttachmentFiles } from './attachments.ts'
 import { emptyConfig, memoryStore } from './config.ts'
 import { openDb, type DB } from './db.ts'
 import { listEvents } from './events.ts'
@@ -31,10 +35,11 @@ const config = {
 function setup() {
   const db = openDb(':memory:')
   const store = memoryStore(config)
-  const app = createApp(db, store)
+  const files = new AttachmentFiles(mkdtempSync(join(tmpdir(), 'noticer-')))
+  const app = createApp(db, store, files)
   const send = (method: string, path: string, body?: unknown) =>
     app.request(path, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
-  return { db, store, send }
+  return { db, store, files, send, app }
 }
 
 const allEvents = (db: DB) => listEvents(db, 0, Number.MAX_SAFE_INTEGER)
@@ -148,6 +153,70 @@ describe('editing an event', () => {
     expect((await send('DELETE', `/api/events/${event.id}`)).status).toBe(404)
     expect(allEvents(db)).toEqual([])
     expect(db.prepare('SELECT COUNT(*) AS n FROM checkin_facts').get()).toEqual({ n: 0 })
+  })
+})
+
+describe('attachments', () => {
+  const attachmentSchema = z.object({ id: z.string(), name: z.string(), type: z.string(), size: z.number(), thumb: z.boolean() })
+  async function upload(app: ReturnType<typeof setup>['app'], name: string, type: string, body: string, thumb?: string) {
+    const form = new FormData()
+    form.set('file', new File([body], name, { type }))
+    if (thumb !== undefined) form.set('thumb', new File([thumb], 'thumb.jpg', { type: 'image/jpeg' }))
+    const res = await app.request('/api/attachments', { method: 'POST', body: form })
+    expect(res.status).toBe(201)
+    return attachmentSchema.parse(await res.json())
+  }
+
+  it('keep any file with a checkin, in order, and send it back whole or by byte range', async () => {
+    const { db, send, app } = setup()
+    const photo = await upload(app, '午餐.jpg', 'image/jpeg', 'jpeg-bytes', 'small')
+    const archive = await upload(app, '收據.zip', 'application/zip', '0123456789')
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], attachments: [archive.id, photo.id] })
+    expect(allEvents(db)[0]?.attachments).toEqual([
+      { id: archive.id, name: '收據.zip', type: 'application/zip', size: 10, thumb: false },
+      { id: photo.id, name: '午餐.jpg', type: 'image/jpeg', size: 10, thumb: true },
+    ])
+    const whole = await app.request(`/api/attachments/${photo.id}`)
+    expect(whole.headers.get('content-type')).toBe('image/jpeg')
+    expect(whole.headers.get('content-disposition')).toMatch(/^inline/)
+    expect(await whole.text()).toBe('jpeg-bytes')
+    expect(await (await app.request(`/api/attachments/${photo.id}/thumb`)).text()).toBe('small')
+    const part = await app.request(`/api/attachments/${archive.id}`, { headers: { range: 'bytes=2-5' } })
+    expect(part.status).toBe(206)
+    expect(part.headers.get('content-range')).toBe('bytes 2-5/10')
+    expect(part.headers.get('content-disposition')).toMatch(/^attachment/)
+    expect(await part.text()).toBe('2345')
+  })
+
+  it('offer a page the browser could run as a download, never in place', async () => {
+    const { app } = setup()
+    const page = await upload(app, 'x.html', 'text/html', '<script>1</script>')
+    const res = await app.request(`/api/attachments/${page.id}`)
+    expect(res.headers.get('content-disposition')).toMatch(/^attachment/)
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+  })
+
+  it('delete the files an edit leaves out or a deleted event carried', async () => {
+    const { db, files, send, app } = setup()
+    const kept = await upload(app, 'a.txt', 'text/plain', 'a')
+    const dropped = await upload(app, 'b.txt', 'text/plain', 'b')
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], attachments: [kept.id, dropped.id] })
+    const [event] = allEvents(db)
+    await send('PUT', `/api/events/${event!.id}`, { note: '', tags: [], eventAt: event!.eventAt, attachments: [kept.id] })
+    expect(allEvents(db)[0]?.attachments.map((a) => a.id)).toEqual([kept.id])
+    expect((await app.request(`/api/attachments/${dropped.id}`)).status).toBe(404)
+    expect(existsSync(files.file(dropped.id))).toBe(false)
+    await send('DELETE', `/api/events/${event!.id}`)
+    expect(existsSync(files.file(kept.id))).toBe(false)
+  })
+
+  it("refuse ids that are no upload or already another event's", async () => {
+    const { db, send, app } = setup()
+    const taken = await upload(app, 'a.txt', 'text/plain', 'a')
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], attachments: [taken.id] })
+    expect((await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], attachments: [taken.id] })).status).toBe(400)
+    expect((await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], attachments: ['nope'] })).status).toBe(400)
+    expect(allEvents(db)).toHaveLength(1)
   })
 })
 
@@ -274,6 +343,21 @@ describe('card tags', () => {
     const [skincare, sunscreen] = store.read().cards
     expect(skincare).toMatchObject({ hiddenTags: ['防曬'], defaultTags: ['化妝水'] })
     expect(sunscreen).toMatchObject({ hiddenTags: ['化妝水'], defaultTags: ['防曬'] })
+  })
+
+  it('keeps a note on the tag itself, shown to every card that can show the tag, and drops it when emptied', async () => {
+    const { store, send } = setup()
+    const note = (tag: string, text: string) => send('PUT', `/api/tag-notes/${encodeURIComponent(tag)}`, { note: text })
+    expect((await note('化妝水', '  早晚各一次\n洗完臉 ')).status).toBe(204)
+    const notesOf = async (cardId: string) => {
+      const tags = (await (await send('GET', `/api/cards/${cardId}/tags`)).json()) as CardTags
+      return tags.notes
+    }
+    expect(await notesOf('skincare')).toEqual({ 化妝水: '早晚各一次\n洗完臉' })
+    expect(await notesOf('sunscreen')).toEqual({ 化妝水: '早晚各一次\n洗完臉' })
+    expect(await notesOf('practice')).toEqual({})
+    await note('化妝水', '   ')
+    expect(store.read().tagNotes).toEqual({})
   })
 })
 

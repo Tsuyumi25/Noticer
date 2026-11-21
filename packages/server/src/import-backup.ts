@@ -1,11 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { AttachmentFiles } from './attachments.ts'
 import { importRecords, monthFileSchema, type BackupRecord } from './backup.ts'
 import { writeConfig } from './config.ts'
 import { convertLegacyConfig, convertLegacyValues } from './legacy.ts'
 import { openDb } from './db.ts'
-import { configPath, dbPath } from './paths.ts'
+import { attachmentsDir, configPath, dbPath } from './paths.ts'
 
 const dir = process.argv[2]
 if (!dir) {
@@ -42,4 +43,6 @@ if (existsSync(snapshotPath)) {
 }
 
 const count = importRecords(openDb(dbPath), imported)
+// Backup files carry no attachment bytes, so the events they replace take theirs along.
+new AttachmentFiles(attachmentsDir).clear()
 console.log(`Imported ${count} events into ${dbPath}`)

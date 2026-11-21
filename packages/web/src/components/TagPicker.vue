@@ -42,6 +42,7 @@ const groups = ref<TagGroup[]>([])
 const hidden = ref<string[]>([])
 const defaults = ref<string[]>([])
 const history = ref<string[]>([])
+const notes = ref<Record<string, string>>({})
 /** Tags typed in during this session that live in no group. */
 const extra = ref<string[]>([])
 const error = ref('')
@@ -54,6 +55,7 @@ watch(
     hidden.value = [...d.hidden]
     defaults.value = [...d.defaults]
     history.value = [...d.ungrouped]
+    notes.value = { ...d.notes }
     if (props.modelValue === null) emit('update:modelValue', [...d.defaults])
   },
   { immediate: true },
@@ -236,6 +238,23 @@ function moveTo(container: string) {
   saveGroups()
 }
 
+// ---------- notes ----------
+const noteSheet = ref<{ tag: string; text: string } | null>(null)
+
+async function saveNote() {
+  const sheet = noteSheet.value
+  if (!sheet) return
+  noteSheet.value = null
+  error.value = ''
+  const text = sheet.text.trim()
+  if (text === '') delete notes.value[sheet.tag]
+  else notes.value[sheet.tag] = text
+  // Every card that can show this tag shows the same note.
+  const res = await api['tag-notes'][':tag'].$put({ param: { tag: sheet.tag }, json: { note: text } })
+  if (!res.ok) error.value = t('tags.saveNoteFailed', { status: res.status })
+  await queryClient.invalidateQueries({ queryKey: ['cardTags'] })
+}
+
 // ---------- values ----------
 const unitSheet = ref<{ tag: string; unit: string; decimals: number; keep: ValueSpec['keep'] } | null>(null)
 
@@ -406,17 +425,27 @@ onBeforeUnmount(() => {
       <div v-if="menu" class="layer" @click.self="menu = null">
         <div class="bs">
           <p class="bs-title">{{ t('common.quoted', { text: menu.label }) }}</p>
+          <p v-if="notes[menu.label]" class="mb-2 text-sm whitespace-pre-line text-zinc-500">{{ notes[menu.label] }}</p>
           <template v-if="menu.container !== AUTO">
             <button class="item" @click="toggleDefault(menu.label); menu = null">{{ defaults.includes(menu.label) ? t('tags.unsetDefault') : t('tags.setDefault') }}</button>
             <button v-if="menu.container !== UNGROUPED" class="item" @click="changeEmoji(menu.label); menu = null">{{ t('tags.changeEmoji') }}</button>
             <button class="item" @click="moveTarget = menu.label; menu = null">{{ t('tags.moveTo') }}</button>
             <button class="item" @click="toggleHidden(menu.label); menu = null">{{ isHidden(menu.label) ? t('tags.unhide') : t('tags.hide') }}</button>
           </template>
+          <button class="item" @click="noteSheet = { tag: menu.label, text: notes[menu.label] ?? '' }; menu = null">{{ t('tags.note') }}</button>
           <button class="item" @click="openUnit(menu.label); menu = null">
             {{ t('tags.unit') }}<span class="ml-auto text-zinc-500">{{ specOf.get(menu.label)?.unit ?? '' }}</span>
           </button>
           <button class="close" @click="menu = null">{{ t('common.cancel') }}</button>
         </div>
+      </div>
+      <div v-if="noteSheet" class="layer" @click.self="noteSheet = null">
+        <form class="bs" @submit.prevent="saveNote">
+          <p class="bs-title">{{ t('tags.noteFor', { tag: noteSheet.tag }) }}</p>
+          <textarea v-model="noteSheet.text" v-focus rows="5" class="note-input" />
+          <button type="submit" class="close primary">{{ t('common.ok') }}</button>
+          <button type="button" class="close" @click="noteSheet = null">{{ t('common.cancel') }}</button>
+        </form>
       </div>
       <div v-if="moveTarget" class="layer" @click.self="moveTarget = null">
         <div class="bs">
@@ -674,6 +703,14 @@ onBeforeUnmount(() => {
   background: #eef2ff;
   color: #3730a3;
   font-weight: 600;
+}
+.note-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d4d4d8;
+  border-radius: 10px;
+  font-size: 16px;
+  resize: none;
 }
 .input {
   width: 100%;

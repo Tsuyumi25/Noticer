@@ -1,5 +1,9 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createApp } from './app.ts'
+import { AttachmentFiles } from './attachments.ts'
 import { emptyConfig, memoryStore } from './config.ts'
 import { openDb } from './db.ts'
 import { analyzeSleep } from './sleep-analysis.ts'
@@ -63,7 +67,7 @@ describe('analyzeSleep', () => {
 })
 
 describe('GET /api/sleep/analysis', () => {
-  const app = createApp(openDb(':memory:'), memoryStore(emptyConfig))
+  const app = createApp(openDb(':memory:'), memoryStore(emptyConfig), new AttachmentFiles(mkdtempSync(join(tmpdir(), 'noticer-'))))
 
   it('accepts windows of 30 to 730 days and refuses the rest', async () => {
     expect((await app.request('/api/sleep/analysis?days=30')).status).toBe(200)

@@ -13,6 +13,19 @@ export function startOfDay(ms: number): number {
 /** A local calendar day as YYYY-MM-DD. */
 export const dayKey = (date: Date) => date.toLocaleDateString('sv-SE')
 
+/** The local midnight a `YYYY-MM-DD` key names, or null for anything else. */
+export function parseDayKey(raw: unknown): Date | null {
+  if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
+  const parsed = new Date(`${raw}T00:00`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+/** Now's clock time on another day, never later than now. */
+export function sameTimeOn(day: Date, now: number): number {
+  const at = new Date(now)
+  return Math.min(now, new Date(day.getFullYear(), day.getMonth(), day.getDate(), at.getHours(), at.getMinutes()).getTime())
+}
+
 const pad = (n: number) => String(n).padStart(2, '0')
 
 export const clock = (ms: number) => {

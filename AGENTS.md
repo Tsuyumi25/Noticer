@@ -35,7 +35,7 @@ repo 會公開。測試、註解、範例文字與 i18n 只能用虛構的卡片
 ```
 packages/server   Hono + zod + better-sqlite3；app.ts 匯出 AppType 給前端用 Hono RPC
 packages/web      Vue 3 + vue-router 檔案路由（src/pages）+ Tailwind v4 + TanStack Query
-data/             app.db（events）＋ config.json（卡片設定，每張卡的規則在 rules）；不進版控
+data/             app.db（events）＋ config.json（卡片設定，每張卡的規則在 rules）＋ attachments/（附件原檔與縮圖）；不進版控
 ```
 
 ## 指令
@@ -44,8 +44,8 @@ data/             app.db（events）＋ config.json（卡片設定，每張卡�
 pnpm dev                          server :3040 + web :5174
 pnpm test                         Vitest
 pnpm typecheck                    tsc（server）+ vue-tsc（web）
-pnpm import-backup <backup-dir>   開發用：用舊版的月份備份 JSON（含 config.json）重灌 data/，舊版的 tracker 會轉成 rules
-pnpm pull-prod <old-app-url>      開發用：從舊版的 API 拉最新的 events 與設定，重灌 data/，舊版的 tracker 會轉成 rules
+pnpm import-backup <backup-dir>   開發用：用舊版的月份備份 JSON（含 config.json）重灌 data/，舊版的 tracker 會轉成 rules；備份不含附件，會清空 attachments/
+pnpm pull-prod <old-app-url>      開發用：從舊版的 API 拉最新的 events、設定與圖片，重灌 data/，舊版的 tracker 會轉成 rules
 ```
 
 一天的切點用 server 程序的本地時區（`TZ`）。

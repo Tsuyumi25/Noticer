@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     "./app": "./src/app.ts",
+    "./attachments": "./src/attachments.ts",
     "./config": "./src/config.ts",
     "./dashboard": "./src/dashboard.ts",
     "./facts": "./src/facts.ts",

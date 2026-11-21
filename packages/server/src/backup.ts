@@ -50,7 +50,7 @@ export function importRecords(db: DB, records: BackupRecord[]): number {
 
   const run = db.transaction(() => {
     db.exec(`
-      DELETE FROM checkin_images;
+      DELETE FROM checkin_attachments;
       DELETE FROM checkin_facts;
       DELETE FROM checkin_tags;
       DELETE FROM events;

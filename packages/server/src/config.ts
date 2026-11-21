@@ -125,6 +125,8 @@ export const configSchema = z
     cards: z.array(cardSchema),
     tagGroups: z.record(z.string(), tagRootSchema).default({}),
     factInputs: z.record(z.string(), factInputSchema).default({}),
+    /** What a tag is, in the user's words; it follows the tag under every root. */
+    tagNotes: z.record(z.string(), z.string().trim().min(1)).default({}),
   })
   .superRefine((config, ctx) => {
     for (const card of config.cards) {
@@ -160,7 +162,7 @@ export type ValueSpec = z.infer<typeof valueSpecSchema>
 export type TagGroup = z.infer<typeof tagGroupsSchema>[number]
 export type RuleStatus = z.infer<typeof statusSchema>
 
-export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {} }
+export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {}, tagNotes: {} }
 
 /** The file as stored: card entries keep fields this app does not model yet (memo…). */
 export type RawConfig = {

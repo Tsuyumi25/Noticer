@@ -37,8 +37,13 @@ export interface CardTags extends RootTags {
   root: string
   hidden: string[]
   defaults: string[]
+  /** Notes on the tags this card can show, keyed by tag. */
+  notes: Record<string, string>
 }
 
 export function cardTags(db: DB, config: Config, card: CardConfig): CardTags {
-  return { root: card.root, ...rootTags(db, config, card.root), hidden: card.hiddenTags ?? [], defaults: card.defaultTags ?? [] }
+  const list = rootTags(db, config, card.root)
+  const shown = [card.root, ...list.ungrouped, ...list.groups.flatMap((g) => g.tags.map((t) => t.label))]
+  const notes = Object.fromEntries(shown.flatMap((tag) => (config.tagNotes[tag] ? [[tag, config.tagNotes[tag]]] : [])))
+  return { root: card.root, ...list, hidden: card.hiddenTags ?? [], defaults: card.defaultTags ?? [], notes }
 }

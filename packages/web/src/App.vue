@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { BookOpen, House, Plus, Settings } from 'lucide-vue-next'
 import { ref, type Component } from 'vue'
+import { useRoute } from 'vue-router'
 import QuickNoteSheet from './components/QuickNoteSheet.vue'
 import { t, type MessageKey } from './i18n/index.ts'
+import { dayKey, parseDayKey, sameTimeOn } from './time.ts'
 
 type Tab = { to: string; icon: Component; label: MessageKey }
 const before: Tab[] = [
@@ -11,6 +13,16 @@ const before: Tab[] = [
 ]
 const after: Tab[] = [{ to: '/settings', icon: Settings, label: 'nav.settings' }]
 const quickNote = ref(false)
+
+// On a past day of the journal, a note starts at that day's version of now: what you add there fills in that day.
+const route = useRoute()
+const quickNoteAt = ref<number | undefined>()
+function openQuickNote() {
+  const day = route.path === '/journal' ? parseDayKey(route.query.day) : null
+  const now = Date.now()
+  quickNoteAt.value = day && dayKey(day) < dayKey(new Date(now)) ? sameTimeOn(day, now) : undefined
+  quickNote.value = true
+}
 </script>
 
 <template>
@@ -30,7 +42,7 @@ const quickNote = ref(false)
       <component :is="tab.icon" :size="22" />
       {{ t(tab.label) }}
     </RouterLink>
-    <button class="flex h-16 flex-1 flex-col items-center justify-center gap-1 text-xs text-zinc-500" @click="quickNote = true">
+    <button class="flex h-16 flex-1 flex-col items-center justify-center gap-1 text-xs text-zinc-500" @click="openQuickNote">
       <span class="flex h-7 w-11 items-center justify-center rounded-full bg-indigo-600 text-white"><Plus :size="20" /></span>
       {{ t('nav.quickNote') }}
     </button>
@@ -45,5 +57,5 @@ const quickNote = ref(false)
       {{ t(tab.label) }}
     </RouterLink>
   </nav>
-  <QuickNoteSheet v-if="quickNote" @close="quickNote = false" />
+  <QuickNoteSheet v-if="quickNote" :at="quickNoteAt" @close="quickNote = false" />
 </template>

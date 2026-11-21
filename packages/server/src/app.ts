@@ -1,6 +1,8 @@
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { z } from 'zod'
+import { AttachmentFiles, findAttachment, MAX_ATTACHMENT_BYTES, MAX_THUMB_BYTES, saveUpload, sendFile, thumbType, unknownAttachments } from './attachments.ts'
 import { checkinTags, createCheckin, deleteCheckin, findEvent, pickedTags, updateCheckin } from './checkin.ts'
 import { rootUnits, rulesSchema, tagGroupsSchema, valueSpecSchema, type Config, type ConfigStore } from './config.ts'
 import { PURE_CARD } from './pure.ts'
@@ -13,7 +15,7 @@ import { analyzeSleep } from './sleep-analysis.ts'
 import { blocksOf, sleepEvents, SLEEP_CARD, WAKE_CARD } from './sleep.ts'
 import { allTags, cardTags, rootTags } from './tags.ts'
 
-type Env = { Variables: { db: DB; store: ConfigStore } }
+type Env = { Variables: { db: DB; store: ConfigStore; files: AttachmentFiles } }
 
 const rangeQuery = z
   .object({
@@ -36,6 +38,8 @@ const checkinBody = z.object({
   tags: z.array(z.string()),
   timeOffset: z.number().int().max(0).optional(),
   facts: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
+  /** Uploaded attachment ids, in the order shown. */
+  attachments: z.array(z.string()).default([]),
 })
 
 // An edited event keeps its created_at; the new time can be anywhere up to now.
@@ -44,6 +48,18 @@ const eventBody = z.object({
   tags: z.array(z.string()),
   eventAt: z.number().int(),
   facts: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
+  /** The event's attachments after the edit, in order; ones left out are deleted. */
+  attachments: z.array(z.string()).default([]),
+})
+
+const uploadForm = z.object({
+  file: z.instanceof(File).refine((f) => f.size <= MAX_ATTACHMENT_BYTES, { message: 'file too large' }),
+  thumb: z
+    .instanceof(File)
+    .refine((f) => f.type.startsWith('image/') && f.size <= MAX_THUMB_BYTES, { message: 'thumbnail must be a small image' })
+    .optional(),
+  width: z.coerce.number().int().positive().optional(),
+  height: z.coerce.number().int().positive().optional(),
 })
 
 const eventParam = z.object({ id: z.coerce.number().int() })
@@ -62,6 +78,8 @@ const newCardBody = z.object({
 })
 
 const tagSettingsBody = z.object({ hiddenTags: z.array(z.string()), defaultTags: z.array(z.string()) })
+
+const tagNoteBody = z.object({ note: z.string() })
 
 type Write = { ok: true; tags: string[]; rows: FactRow[]; choiceKeys: string[] } | { ok: false; status: 400 | 404 | 422; error: string }
 
@@ -96,34 +114,74 @@ const api = new Hono<Env>()
     return c.json(analyzeSleep(blocksOf(sleepEvents(events, now)), now))
   })
   .post('/checkin', zValidator('json', checkinBody), (c) => {
-    const { cardId, note, tags, timeOffset = 0, facts = {} } = c.req.valid('json')
+    const { cardId, note, tags, timeOffset = 0, facts = {}, attachments } = c.req.valid('json')
     const write = resolveWrite(c.var.store.read(), cardId, tags, facts)
     if (!write.ok) return c.json({ error: write.error }, write.status)
+    const unknown = unknownAttachments(c.var.db, attachments, null)
+    if (unknown.length) return c.json({ error: `unknown attachments ${unknown.join(', ')}` }, 400)
     const trimmed = note.trim()
     const now = Math.floor(Date.now() / 1000)
-    const id = createCheckin(c.var.db, cardId, { note: trimmed === '' ? null : trimmed, tags: write.tags, facts: write.rows, now, timeOffset })
+    const id = createCheckin(c.var.db, c.var.files, cardId, {
+      note: trimmed === '' ? null : trimmed,
+      tags: write.tags,
+      facts: write.rows,
+      now,
+      timeOffset,
+      attachments,
+    })
     return c.json({ id }, 201)
   })
   .put('/events/:id', zValidator('param', eventParam), zValidator('json', eventBody), (c) => {
     const { id } = c.req.valid('param')
-    const { note, tags, eventAt, facts = {} } = c.req.valid('json')
+    const { note, tags, eventAt, facts = {}, attachments } = c.req.valid('json')
     const stored = findEvent(c.var.db, id)
     if (!stored) return c.json({ error: `unknown event ${id}` }, 404)
     if (eventAt > Math.floor(Date.now() / 1000)) return c.json({ error: 'eventAt is in the future' }, 400)
     const write = resolveWrite(c.var.store.read(), stored.cardId, tags, facts)
     if (!write.ok) return c.json({ error: write.error }, write.status)
+    const unknown = unknownAttachments(c.var.db, attachments, id)
+    if (unknown.length) return c.json({ error: `unknown attachments ${unknown.join(', ')}` }, 400)
     const trimmed = note.trim()
-    updateCheckin(c.var.db, id, write.choiceKeys, {
+    updateCheckin(c.var.db, c.var.files, id, write.choiceKeys, {
       note: trimmed === '' ? null : trimmed,
       tags: write.tags,
       facts: write.rows,
       timeOffset: eventAt - stored.createdAt,
+      attachments,
     })
     return c.body(null, 204)
   })
   .delete('/events/:id', zValidator('param', eventParam), (c) => {
-    if (!deleteCheckin(c.var.db, c.req.valid('param').id)) return c.json({ error: 'unknown event' }, 404)
+    if (!deleteCheckin(c.var.db, c.var.files, c.req.valid('param').id)) return c.json({ error: 'unknown event' }, 404)
     return c.body(null, 204)
+  })
+  .post(
+    '/attachments',
+    bodyLimit({ maxSize: MAX_ATTACHMENT_BYTES + MAX_THUMB_BYTES + 64 * 1024, onError: (c) => c.json({ error: 'file too large' }, 413) }),
+    zValidator('form', uploadForm),
+    async (c) => {
+      const { file, thumb, width, height } = c.req.valid('form')
+      const attachment = saveUpload(c.var.db, c.var.files, {
+        name: file.name,
+        type: file.type,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+        ...(thumb ? { thumb: new Uint8Array(await thumb.arrayBuffer()) } : {}),
+        ...(width && height ? { width, height } : {}),
+        now: Math.floor(Date.now() / 1000),
+      })
+      return c.json(attachment, 201)
+    },
+  )
+  .get('/attachments/:id', (c) => {
+    const attachment = findAttachment(c.var.db, c.req.param('id'))
+    if (!attachment) return c.json({ error: 'unknown attachment' }, 404)
+    return sendFile(c, c.var.files.file(attachment.id), attachment.type, attachment.name)
+  })
+  .get('/attachments/:id/thumb', (c) => {
+    const attachment = findAttachment(c.var.db, c.req.param('id'))
+    if (!attachment?.thumb) return c.json({ error: 'no thumbnail' }, 404)
+    const path = c.var.files.thumb(attachment.id)
+    return sendFile(c, path, thumbType(path))
   })
   .get('/pure', (c) => {
     const config = c.var.store.read()
@@ -235,6 +293,17 @@ const api = new Hono<Env>()
     })
     return c.body(null, 204)
   })
+  .put('/tag-notes/:tag', zValidator('json', tagNoteBody), (c) => {
+    const tag = c.req.param('tag')
+    const note = c.req.valid('json').note.trim()
+    const notes = { ...c.var.store.read().tagNotes }
+    if (note === '') delete notes[tag]
+    else notes[tag] = note
+    c.var.store.update((raw) => {
+      raw.tagNotes = notes
+    })
+    return c.body(null, 204)
+  })
   .put('/tag-groups/:root', zValidator('json', tagGroupsBody), (c) => {
     const root = c.req.param('root')
     const { groups } = c.req.valid('json')
@@ -265,11 +334,12 @@ const api = new Hono<Env>()
 
 export type AppType = typeof api
 
-export function createApp(db: DB, store: ConfigStore): Hono<Env> {
+export function createApp(db: DB, store: ConfigStore, files: AttachmentFiles): Hono<Env> {
   return new Hono<Env>()
     .use(async (c, next) => {
       c.set('db', db)
       c.set('store', store)
+      c.set('files', files)
       await next()
     })
     .route('/', api)

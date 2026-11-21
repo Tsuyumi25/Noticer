@@ -6,7 +6,9 @@ import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
 import { PAD_ROW_COMPONENTS } from '../plugins/index.ts'
+import type { Attachment } from '../attachments.ts'
 import { absoluteTime, relativeTime } from '../time.ts'
+import AttachmentField from './AttachmentField.vue'
 import TagPicker from './TagPicker.vue'
 import TimeOffsetPopup from './TimeOffsetPopup.vue'
 import ValuePad from './ValuePad.vue'
@@ -24,6 +26,7 @@ export interface SheetEvent {
   note: string | null
   tags: string[]
   facts: Record<string, string | number | boolean>
+  attachments: Attachment[]
 }
 
 const props = defineProps<{ card: SheetCard; event?: SheetEvent }>()
@@ -31,6 +34,9 @@ const emit = defineEmits<{ close: [] }>()
 
 const initialNote = props.event?.note ?? ''
 const note = ref(initialNote)
+const initialAttachments = (props.event?.attachments ?? []).map((a) => a.id).join('\n')
+const attachments = ref<Attachment[]>([...(props.event?.attachments ?? [])])
+const uploading = ref(false)
 /** Null until the picker loads this card's preselected tags. */
 const tags = ref<string[] | null>(props.event ? [...props.event.tags] : null)
 let initialTags: string | null = props.event ? [...props.event.tags].sort().join('\n') : null
@@ -120,7 +126,8 @@ const dirty = computed(
     happenedAt.value !== initialHappenedAt ||
     (tags.value !== null && [...tags.value].sort().join('\n') !== initialTags) ||
     (choices.value !== null && JSON.stringify(choices.value) !== initialChoices) ||
-    JSON.stringify(amounts.value) !== initialAmounts,
+    JSON.stringify(amounts.value) !== initialAmounts ||
+    attachments.value.map((a) => a.id).join('\n') !== initialAttachments,
 )
 
 const editing = ref(false)
@@ -142,7 +149,7 @@ const submit = useMutation({
     const facts: Record<string, number | string> = {}
     for (const [key, v] of Object.entries(choices.value ?? {})) if (v !== null) facts[key] = v
     for (const [tag, v] of Object.entries(amounts.value)) if (v !== null) facts[`${tag}:${specOf.value.get(tag)!.unit}`] = v
-    const json = { note: note.value, tags: tags.value ?? [], facts }
+    const json = { note: note.value, tags: tags.value ?? [], facts, attachments: attachments.value.map((a) => a.id) }
     const res = props.event
       ? await api.events[':id'].$put({
           param: { id: String(props.event.id) },
@@ -280,6 +287,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             :placeholder="t('sheet.notePlaceholder')"
             class="mt-4 w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
           />
+          <AttachmentField v-model="attachments" v-model:busy="uploading" />
         </div>
         <ValuePad
           v-if="pad && specOf.get(pad)"
@@ -323,7 +331,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
               <button
                 class="h-12 flex-1 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
-                :disabled="choices === null || missing.length > 0 || submit.isPending.value || leaving"
+                :disabled="choices === null || missing.length > 0 || uploading || submit.isPending.value || leaving"
                 @click="submit.mutate()"
               >
                 {{ t(event ? 'sheet.save' : 'sheet.submit') }}

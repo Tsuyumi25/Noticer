@@ -25,3 +25,48 @@
     border-radius 0.3s cubic-bezier(0.32, 0.72, 0, 1),
     opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
+
+/* Slides the attachment viewer builds itself: a video, or a file it cannot show. */
+.pswp-video {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.pswp-video video {
+  max-width: 100%;
+  max-height: 100%;
+}
+.pswp-file {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 24px;
+  color: white;
+  text-align: center;
+}
+.pswp-file__name {
+  overflow-wrap: anywhere;
+}
+.pswp-file__size {
+  color: #a1a1aa;
+  font-size: 14px;
+}
+.pswp-file__download {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  margin-top: 8px;
+  padding: 0 20px;
+  border-radius: 12px;
+  background: white;
+  color: #18181b;
+  font-weight: 600;
+}
+.pswp__button--download .pswp__icn path {
+  stroke: var(--pswp-icon-color);
+}

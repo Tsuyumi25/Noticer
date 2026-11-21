@@ -8,3 +8,4 @@ mkdirSync(dataDir, { recursive: true })
 
 export const dbPath = join(dataDir, 'app.db')
 export const configPath = join(dataDir, 'config.json')
+export const attachmentsDir = join(dataDir, 'attachments')

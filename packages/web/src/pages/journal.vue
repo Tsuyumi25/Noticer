@@ -9,11 +9,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.ts'
 import CheckinSheet, { type SheetEvent } from '../components/CheckinSheet.vue'
 import QuickNoteSheet from '../components/QuickNoteSheet.vue'
+import AttachmentIcon from '../components/AttachmentIcon.vue'
+import { isVideo, isVisual, previewUrl } from '../attachments.ts'
+import { openViewer } from '../viewer.ts'
 import JournalCalendar from '../components/JournalCalendar.vue'
 import { useDaySwipe } from '../daySwipe.ts'
 import { t, tn } from '../i18n/index.ts'
 import { cardColor, tagColors } from '../tagColors.ts'
-import { clock, date, dayKey } from '../time.ts'
+import { clock, date, dayKey, parseDayKey } from '../time.ts'
 
 const GAP_SECONDS = 2 * 3600
 
@@ -21,9 +24,7 @@ const route = useRoute()
 const router = useRouter()
 
 const day = computed(() => {
-  const raw = route.query.day
-  const parsed = typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T00:00`) : null
-  const base = parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date()
+  const base = parseDayKey(route.query.day) ?? new Date()
   return new Date(base.getFullYear(), base.getMonth(), base.getDate())
 })
 const dayAt = (n: number) => new Date(day.value.getFullYear(), day.value.getMonth(), day.value.getDate() + n)
@@ -171,6 +172,20 @@ function pickDay(key: string) {
                 </span>
               </div>
               <p v-if="row.event.note" class="note">{{ row.event.note }}</p>
+              <div v-if="row.event.attachments.length" class="mt-1.5 flex flex-wrap gap-1.5">
+                <button
+                  v-for="(a, i) in row.event.attachments"
+                  :key="a.id"
+                  class="attachment"
+                  :class="{ file: !isVisual(a) }"
+                  :aria-label="a.name"
+                  @click.stop="openViewer(row.event.attachments, i)"
+                >
+                  <img v-if="isVisual(a)" :src="previewUrl(a)" alt="" loading="lazy" class="size-full rounded-lg object-cover" />
+                  <template v-else><AttachmentIcon :attachment="a" :size="16" /><span class="truncate">{{ a.name }}</span></template>
+                  <span v-if="isVideo(a) && isVisual(a)" class="play">▶</span>
+                </button>
+              </div>
             </div>
           </li>
         </template>
@@ -317,6 +332,33 @@ function pickDay(key: string) {
   margin-left: 1px;
   color: #6b7280;
   font: 400 10px ui-monospace, 'SF Mono', Menlo, monospace;
+}
+.attachment {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+.attachment.file {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  max-width: 100%;
+  height: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: #f4f4f5;
+  color: #52525b;
+  font-size: 13px;
+}
+.attachment .play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.6);
 }
 .note {
   margin-top: 4px;

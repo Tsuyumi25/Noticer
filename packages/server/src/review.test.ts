@@ -6,7 +6,7 @@ import { cardCalendar } from './review.ts'
 const local = (month: number, d: number, h = 12) => new Date(2026, month - 1, d, h).getTime() / 1000
 let nextId = 1
 const ev = (eventAt: number, tags: string[], facts: EventRecord['facts'] = {}): EventRecord => ({
-  id: nextId++, cardId: 'x', eventAt, timeOffset: 0, note: null, tags, facts,
+  id: nextId++, cardId: 'x', eventAt, timeOffset: 0, note: null, tags, facts, attachments: [],
 })
 
 const unjudged: Rules = { find: { match: 'all', blocks: [] }, now: {}, back: null }

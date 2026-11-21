@@ -45,11 +45,20 @@ CREATE TABLE IF NOT EXISTS checkin_facts (
 CREATE INDEX IF NOT EXISTS idx_checkin_facts_k ON checkin_facts (k);
 CREATE INDEX IF NOT EXISTS idx_checkin_facts_k_type ON checkin_facts (k, type);
 
-CREATE TABLE IF NOT EXISTS checkin_images (
-  checkin_id  INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  filename    TEXT    NOT NULL,
+-- Any file kept with an event; its bytes sit in the attachments folder under `id`, and a thumbnail the browser drew
+-- under `id.thumb` when `thumb` is 1; `width`/`height` are a picture's or video's pixels when known. An upload belongs
+-- to no event until the checkin or edit carrying it is saved.
+CREATE TABLE IF NOT EXISTS checkin_attachments (
+  id          TEXT    PRIMARY KEY,
+  checkin_id  INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  name        TEXT    NOT NULL,
+  type        TEXT    NOT NULL,
+  size        INTEGER NOT NULL,
+  thumb       INTEGER NOT NULL DEFAULT 0,
+  width       INTEGER,
+  height      INTEGER,
   sort_order  INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (checkin_id, filename)
+  created_at  INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_checkin_images_checkin_id ON checkin_images (checkin_id);
+CREATE INDEX IF NOT EXISTS idx_checkin_attachments_checkin_id ON checkin_attachments (checkin_id);

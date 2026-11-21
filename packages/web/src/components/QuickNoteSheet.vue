@@ -7,17 +7,23 @@ import { api } from '../api.ts'
 import { t } from '../i18n/index.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
 import { absoluteTime, relativeTime } from '../time.ts'
+import type { Attachment } from '../attachments.ts'
+import AttachmentField from './AttachmentField.vue'
 import type { SheetEvent } from './CheckinSheet.vue'
 import TimeOffsetPopup from './TimeOffsetPopup.vue'
 
 /** A record that belongs to no card: start from any card's tag, or type a new one. */
-const props = defineProps<{ event?: SheetEvent }>()
+/** `at`: when a new note starts out, if not now. */
+const props = defineProps<{ event?: SheetEvent; at?: number }>()
 const emit = defineEmits<{ close: [] }>()
 
 const initialNote = props.event?.note ?? ''
 const initialTags = [...(props.event?.tags ?? [])].sort().join('\n')
-const initialHappenedAt = props.event ? props.event.eventAt * 1000 : null
+const initialHappenedAt = props.event ? props.event.eventAt * 1000 : (props.at ?? null)
 const note = ref(initialNote)
+const initialAttachments = (props.event?.attachments ?? []).map((a) => a.id).join('\n')
+const attachments = ref<Attachment[]>([...(props.event?.attachments ?? [])])
+const uploading = ref(false)
 const tags = ref<string[]>([...(props.event?.tags ?? [])])
 const happenedAt = ref<number | null>(initialHappenedAt)
 const timePopup = ref(false)
@@ -75,9 +81,13 @@ function addTag() {
 }
 const vFocus = { mounted: (el: HTMLElement) => el.focus() }
 
-const empty = computed(() => tags.value.length === 0 && note.value.trim() === '')
+const empty = computed(() => tags.value.length === 0 && note.value.trim() === '' && attachments.value.length === 0)
 const dirty = computed(
-  () => note.value.trim() !== initialNote.trim() || happenedAt.value !== initialHappenedAt || [...tags.value].sort().join('\n') !== initialTags,
+  () =>
+    note.value.trim() !== initialNote.trim() ||
+    happenedAt.value !== initialHappenedAt ||
+    [...tags.value].sort().join('\n') !== initialTags ||
+    attachments.value.map((a) => a.id).join('\n') !== initialAttachments,
 )
 
 const queryClient = useQueryClient()
@@ -89,7 +99,7 @@ function refresh() {
 }
 const submit = useMutation({
   mutationFn: async () => {
-    const json = { note: note.value, tags: tags.value }
+    const json = { note: note.value, tags: tags.value, attachments: attachments.value.map((a) => a.id) }
     const res = props.event
       ? await api.events[':id'].$put({
           param: { id: String(props.event.id) },
@@ -199,6 +209,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             :placeholder="t('sheet.notePlaceholder')"
             class="mt-4 w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
           />
+          <AttachmentField v-model="attachments" v-model:busy="uploading" />
         </div>
         <footer class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <p v-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
@@ -214,7 +225,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
             <button
               class="h-12 flex-1 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
-              :disabled="empty || submit.isPending.value || leaving"
+              :disabled="empty || uploading || submit.isPending.value || leaving"
               @click="submit.mutate()"
             >
               {{ t(event ? 'sheet.save' : 'sheet.submit') }}

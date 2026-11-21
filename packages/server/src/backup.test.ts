@@ -1,5 +1,9 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { createApp } from './app.ts'
+import { AttachmentFiles } from './attachments.ts'
 import { importRecords, type BackupRecord } from './backup.ts'
 import { emptyConfig, memoryStore } from './config.ts'
 import { openDb, type DB } from './db.ts'
@@ -46,7 +50,7 @@ const dayStart = Date.parse('2026-06-01T00:00:00+08:00') / 1000
 const dayEnd = Date.parse('2026-06-02T00:00:00+08:00') / 1000
 
 async function fetchEvents(db: DB, from: number, to: number) {
-  const res = await createApp(db, memoryStore(emptyConfig)).request(`/api/events?from=${from}&to=${to}`)
+  const res = await createApp(db, memoryStore(emptyConfig), new AttachmentFiles(mkdtempSync(join(tmpdir(), 'noticer-')))).request(`/api/events?from=${from}&to=${to}`)
   return { status: res.status, body: (await res.json()) as EventRecord[] }
 }
 

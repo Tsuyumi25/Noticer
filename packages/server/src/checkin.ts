@@ -1,3 +1,4 @@
+import { attachmentIdsOf, setAttachments, type AttachmentFiles } from './attachments.ts'
 import type { CardConfig } from './config.ts'
 import type { DB } from './db.ts'
 import type { FactRow } from './facts.ts'
@@ -16,6 +17,8 @@ interface CheckinInput {
   tags: string[]
   facts: FactRow[]
   timeOffset: number
+  /** Attachment ids in display order; checked beforehand to be uploads this event may take. */
+  attachments: string[]
 }
 
 function writeTagsAndFacts(db: DB, id: number, tags: string[], facts: FactRow[]) {
@@ -30,11 +33,17 @@ function writeTagsAndFacts(db: DB, id: number, tags: string[], facts: FactRow[])
   for (const f of facts) insertFact.run(id, f.k, f.type, f.type === 'integer' ? BigInt(f.value) : f.value)
 }
 
-export function createCheckin(db: DB, cardId: string, { note, tags, facts, timeOffset, now }: CheckinInput & { now: number }): number {
+export function createCheckin(
+  db: DB,
+  files: AttachmentFiles,
+  cardId: string,
+  { note, tags, facts, timeOffset, attachments, now }: CheckinInput & { now: number },
+): number {
   const insertEvent = db.prepare('INSERT INTO events (card_id, created_at, time_offset, note) VALUES (?, ?, ?, ?)')
   return db.transaction(() => {
     const id = Number(insertEvent.run(cardId, now, timeOffset, note).lastInsertRowid)
     writeTagsAndFacts(db, id, tags, facts)
+    setAttachments(db, files, id, attachments)
     return id
   })()
 }
@@ -54,8 +63,8 @@ export function findEvent(db: DB, id: number): StoredEvent | undefined {
  * Replaces an event's note, time, tags, values and the given choice facts; created_at stays, so the new time becomes
  * the offset from it. Facts this app does not model (kept from the old app) survive.
  */
-export function updateCheckin(db: DB, id: number, choiceKeys: string[], { note, tags, facts, timeOffset }: CheckinInput) {
-  db.transaction(() => {
+export function updateCheckin(db: DB, files: AttachmentFiles, id: number, choiceKeys: string[], { note, tags, facts, timeOffset, attachments }: CheckinInput) {
+  const dropped = db.transaction(() => {
     db.prepare('UPDATE events SET time_offset = ?, note = ? WHERE id = ?').run(timeOffset, note, id)
     db.prepare('DELETE FROM checkin_tags WHERE checkin_id = ?').run(id)
     db.prepare("DELETE FROM checkin_facts WHERE checkin_id = ? AND (instr(k, ':') > 0 OR k IN (SELECT value FROM json_each(?)))").run(
@@ -63,9 +72,14 @@ export function updateCheckin(db: DB, id: number, choiceKeys: string[], { note, 
       JSON.stringify(choiceKeys),
     )
     writeTagsAndFacts(db, id, tags, facts)
+    return setAttachments(db, files, id, attachments)
   })()
+  for (const attachment of dropped) files.remove(attachment)
 }
 
-export function deleteCheckin(db: DB, id: number): boolean {
-  return db.prepare('DELETE FROM events WHERE id = ?').run(id).changes > 0
+export function deleteCheckin(db: DB, files: AttachmentFiles, id: number): boolean {
+  const attachments = attachmentIdsOf(db, id)
+  const deleted = db.prepare('DELETE FROM events WHERE id = ?').run(id).changes > 0
+  for (const attachment of attachments) files.remove(attachment)
+  return deleted
 }
