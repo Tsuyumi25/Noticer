@@ -37,7 +37,6 @@ export default {
   'sleep.tooLong': '長すぎ',
   'sleep.bitShort': 'やや短い',
   'sleep.analysis': '分析',
-  'sleep.calendar': '月別',
   'sleep.tau': '周期 τ',
   'sleep.drift': '1日のずれ',
   'sleep.rotation': '一周',
@@ -47,6 +46,8 @@ export default {
   'sleep.current': '今',
   'sleep.daysLater': '{n} 日後',
   'sleep.all': '全期間',
+  'sleep.sky': '空の色',
+  'sleep.duration': '長さ',
 
   'unit.hour': '時間',
   'unit.day': '日',

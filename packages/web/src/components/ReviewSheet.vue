@@ -73,8 +73,7 @@ const showDelta = (d: number) => `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.ab
 
 const selected = ref<string | null>(null)
 const editingRules = ref(false)
-const picked = ref<'analysis' | 'calendar' | null>(null)
-const tab = computed(() => picked.value ?? (props.sleep ? 'analysis' : 'calendar'))
+const tab = computed(() => (props.sleep ? 'analysis' : 'calendar'))
 
 // The months open at the bottom, on this month, each time the tab is shown; later refetches leave the scroll alone.
 const scroller = ref<HTMLElement | null>(null)
@@ -132,10 +131,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <Settings :size="22" />
           </button>
         </header>
-        <div v-if="sleep" class="tabs mx-3 mb-1 shrink-0">
-          <button :class="{ on: tab === 'analysis' }" @click="picked = 'analysis'">{{ t('sleep.analysis') }}</button>
-          <button :class="{ on: tab === 'calendar' }" @click="picked = 'calendar'">{{ t('sleep.calendar') }}</button>
-        </div>
 
         <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <SleepAnalysis v-if="tab === 'analysis'" class="mx-auto max-w-2xl" />
@@ -216,25 +211,5 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 .today {
   box-shadow: inset 0 0 0 2px #4f46e5;
-}
-.tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 12px;
-  background: #f4f4f5;
-}
-.tabs button {
-  min-height: 40px;
-  border-radius: 9px;
-  color: #52525b;
-  font-weight: 500;
-}
-.tabs button.on {
-  background: white;
-  color: #18181b;
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
 }
 </style>

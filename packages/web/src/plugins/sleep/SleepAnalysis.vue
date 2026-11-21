@@ -34,6 +34,38 @@ const DURATION_COLORS: [number, string][] = [
 ]
 const colorOf = (hours: number) => DURATION_COLORS.find(([upTo]) => hours < upTo)![1]
 
+/** Enough, some, short: the plainer three-way read of how long a sleep was. */
+const LENGTH_COLORS: [number, string][] = [
+  [5, '#e24b4a'],
+  [7, '#ef9f27'],
+  [Infinity, '#1d9e75'],
+]
+const lengthColorOf = (hours: number) => LENGTH_COLORS.find(([upTo]) => hours < upTo)![1]
+
+/** Sky colour by clock hour: night blue, sunrise orange, noon yellow, sunset orange. */
+const SKY: [number, string][] = [
+  [0, '#0b1a33'],
+  [4, '#133058'],
+  [5.5, '#1e3d6a'],
+  [6, '#c06030'],
+  [7, '#e0a050'],
+  [9, '#e8c840'],
+  [12, '#f0d830'],
+  [15, '#e8c840'],
+  [17, '#e0a050'],
+  [18, '#c06030'],
+  [18.5, '#8b3a2a'],
+  [20, '#1e3d6a'],
+  [22, '#133058'],
+]
+
+/** The same chart, coloured by how long each sleep was in five steps, by the time of day it covers, or in three steps. */
+const COLOR_MODES = ['analysis', 'sky', 'duration'] as const
+type ColorMode = (typeof COLOR_MODES)[number]
+const colorMode = ref<ColorMode>('analysis')
+const legend = computed(() => (colorMode.value === 'duration' ? LENGTH_COLORS : DURATION_COLORS))
+const modeLabel = (mode: ColorMode) => t(mode === 'analysis' ? 'sleep.analysis' : mode === 'sky' ? 'sleep.sky' : 'sleep.duration')
+
 const rangeKey = ref<RangeKey>('1M')
 const range = computed(() => RANGES.find((r) => r.key === rangeKey.value)!)
 
@@ -91,12 +123,21 @@ const bars = computed(() => {
     const column = columnOf(b.onset)
     const start = (b.onset * 1000 - column) / 3_600_000
     const end = start + (b.offset - b.onset) / 3600
-    const fill = colorOf(b.durationHours)
+    const fill = colorMode.value === 'sky' ? 'url(#sleep-sky)' : colorMode.value === 'duration' ? lengthColorOf(b.durationHours) : colorOf(b.durationHours)
     put(column, start, Math.min(24, end), fill)
     if (end > 24) put(nextDay(column), 0, end - 24, fill)
   }
   return out
 })
+
+/** The sky laid down the column's axis, which starts at the cut. */
+const skyStops = (() => {
+  const atCut = SKY.find(([h]) => h === CUT_HOUR)![1]
+  const shifted = SKY.map(([h, color]) => [(h - CUT_HOUR + 24) % 24, color] as const)
+    .filter(([h]) => h > 0)
+    .sort((a, b) => a[0] - b[0])
+  return [[0, atCut] as const, ...shifted, [24, atCut] as const].map(([h, color]) => ({ offset: `${((h / 24) * 100).toFixed(2)}%`, color }))
+})()
 
 /** The normal night as bands on the column's axis; one that wraps past the cut becomes two. */
 const nightBands = computed(() => {
@@ -209,16 +250,27 @@ const nightLabel = computed(() => {
   <p v-if="isPending" class="p-6 text-center text-zinc-400">{{ t('common.loading') }}</p>
   <p v-else-if="isError" class="p-6 text-center text-red-600">{{ t('common.loadFailed') }}</p>
   <div v-else-if="data" class="flex flex-col gap-4 px-3 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <div class="tabs">
+      <button v-for="mode in COLOR_MODES" :key="mode" :class="{ on: colorMode === mode }" @click="colorMode = mode">{{ modeLabel(mode) }}</button>
+    </div>
+
     <div>
-      <div class="mb-2 flex flex-wrap gap-x-3 gap-y-1 px-1 text-xs text-zinc-500">
-        <span v-for="([upTo, color], i) in DURATION_COLORS" :key="color" class="flex items-center gap-1">
-          <i class="swatch" :style="{ background: color }" />
-          {{ i === 0 ? `<${upTo}` : upTo === Infinity ? `>${DURATION_COLORS[i - 1]![0]}` : `${DURATION_COLORS[i - 1]![0]}–${upTo}` }}{{ t('unit.hour') }}
-        </span>
+      <div class="mb-2 flex min-h-4 flex-wrap gap-x-3 gap-y-1 px-1 text-xs text-zinc-500">
+        <template v-if="colorMode !== 'sky'">
+          <span v-for="([upTo, color], i) in legend" :key="color" class="flex items-center gap-1">
+            <i class="swatch" :style="{ background: color }" />
+            {{ i === 0 ? `<${upTo}` : upTo === Infinity ? `≥${legend[i - 1]![0]}` : `${legend[i - 1]![0]}–${upTo}` }}{{ t('unit.hour') }}
+          </span>
+        </template>
       </div>
       <div class="chart" :style="{ height: `${PLOT_HEIGHT + DATE_ROW}px` }">
         <div ref="viewport" data-hscroll class="scroller" :style="{ right: `${AXIS_WIDTH}px` }">
           <svg :width="width" :height="PLOT_HEIGHT + DATE_ROW">
+            <defs>
+              <linearGradient id="sleep-sky" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" :y2="PLOT_HEIGHT">
+                <stop v-for="s in skyStops" :key="s.offset" :offset="s.offset" :stop-color="s.color" />
+              </linearGradient>
+            </defs>
             <rect v-for="([from, to], i) in nightBands" :key="`n${i}`" x="0" :y="y(from)" :width="width" :height="y(to) - y(from)" fill="#dcfce7" />
             <line v-for="h in HOUR_LINES" :key="`h${h}`" x1="0" :x2="width" :y1="y(h)" :y2="y(h)" stroke="#e4e4e7" />
             <rect v-for="(b, i) in bars" :key="i" :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.fill" rx="1" />

@@ -37,7 +37,6 @@ export default {
   'sleep.tooLong': 'Too long',
   'sleep.bitShort': 'A bit short',
   'sleep.analysis': 'Analysis',
-  'sleep.calendar': 'By month',
   'sleep.tau': 'Period τ',
   'sleep.drift': 'Daily drift',
   'sleep.rotation': 'Full cycle',
@@ -47,6 +46,8 @@ export default {
   'sleep.current': 'Now',
   'sleep.daysLater': 'in {n} d',
   'sleep.all': 'All',
+  'sleep.sky': 'Daylight',
+  'sleep.duration': 'Length',
 
   'unit.hour': 'h',
   'unit.day': 'd',
