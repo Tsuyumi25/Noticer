@@ -13,7 +13,7 @@ import AttachmentIcon from '../components/AttachmentIcon.vue'
 import { isVideo, isVisual, previewUrl } from '../attachments.ts'
 import { openViewer } from '../viewer.ts'
 import JournalFinder from '../components/JournalFinder.vue'
-import { useDaySwipe } from '../daySwipe.ts'
+import { usePageSwipe } from '../pageSwipe.ts'
 import { t, tn } from '../i18n/index.ts'
 import { cardColor, tagColors } from '../tagColors.ts'
 import { clock, date, dayKey, parseDayKey } from '../time.ts'
@@ -63,7 +63,7 @@ watch(
 )
 
 const pane = ref<HTMLElement | null>(null)
-const swipe = useDaySwipe(pane, { canGoForward: () => !isToday.value, go: (step) => goTo(shiftDay(step)) })
+const swipe = usePageSwipe(pane, { canGo: (step) => step === -1 || !isToday.value, go: (step) => goTo(shiftDay(step)) })
 
 const { data: config } = useQuery({
   queryKey: ['config'],

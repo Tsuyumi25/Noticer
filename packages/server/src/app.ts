@@ -8,7 +8,7 @@ import { rootUnits, rulesSchema, tagGroupsSchema, valueSpecSchema, type Config, 
 import { PURE_CARD } from './pure.ts'
 import { buildDashboard } from './dashboard.ts'
 import type { DB } from './db.ts'
-import { listEvents, listMedia, searchEvents } from './events.ts'
+import { dayCounts, listEvents, listMedia, searchEvents } from './events.ts'
 import { cardInputs, readFacts, type FactRow } from './facts.ts'
 import { cardCalendar, reportCounts } from './review.ts'
 import { analyzeSleep } from './sleep-analysis.ts'
@@ -122,6 +122,7 @@ const api = new Hono<Env>()
     return c.json(searchEvents(c.var.db, q, limit, after ?? null))
   })
   .get('/media', (c) => c.json(listMedia(c.var.db)))
+  .get('/days', (c) => c.json(dayCounts(c.var.db)))
   .get('/dashboard', zValidator('query', dashboardQuery), (c) => {
     const now = c.req.valid('query').at ?? Math.floor(Date.now() / 1000)
     return c.json(buildDashboard(c.var.store.read(), listEvents(c.var.db, 0, now + 1), now))

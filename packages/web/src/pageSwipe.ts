@@ -1,7 +1,7 @@
 import { createGesture, type Gesture } from '@ionic/core/components'
 import { computed, onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
 
-/** Only a swipe within this many degrees of horizontal turns the day; anything steeper stays a scroll. */
+/** Only a swipe within this many degrees of horizontal turns the page; anything steeper stays a scroll. */
 const MAX_ANGLE = 30
 /** Pixels the finger travels before the direction is judged, once. */
 const THRESHOLD = 10
@@ -15,12 +15,12 @@ const FLICK = 0.2
 const rubber = (dx: number, width: number) => Math.sign(dx) * (1 - 1 / ((Math.abs(dx) * 0.55) / width + 1)) * width
 
 /**
- * Swiping the pane right goes back a day and left goes forward. The pane follows the finger; on release past half its
- * width or on a flick, the day changes at once and the new day slides in from where the neighbouring page would sit.
- * A new swipe can start mid-slide, so days can be flipped as fast as the finger goes. Vertical scrolling is never
- * taken over.
+ * Swiping the pane right goes back a page and left goes forward, like turning days in the journal or tabs in a sheet.
+ * The pane follows the finger; on release past half its width or on a flick, the page changes at once and the new one
+ * slides in from where the neighbouring page would sit. A new swipe can start mid-slide, so pages can be flipped as fast
+ * as the finger goes. Vertical scrolling is never taken over; a side with no page left gives a rubber band instead.
  */
-export function useDaySwipe(pane: Ref<HTMLElement | null>, options: { canGoForward: () => boolean; go: (step: -1 | 1) => Promise<unknown> }) {
+export function usePageSwipe(pane: Ref<HTMLElement | null>, options: { canGo: (step: -1 | 1) => boolean; go: (step: -1 | 1) => Promise<unknown> }) {
   const offset = ref(0)
   const animated = ref(false)
   let tracking = false
@@ -47,7 +47,7 @@ export function useDaySwipe(pane: Ref<HTMLElement | null>, options: { canGoForwa
     const mine = ++generation
     await options.go(step)
     if (mine !== generation) return
-    // The new day starts where it would have been as the page next to the one the finger let go of.
+    // The new page starts where it would have been as the page next to the one the finger let go of.
     animated.value = false
     offset.value = released + step * width
     requestAnimationFrame(() => requestAnimationFrame(() => mine === generation && slideTo(0)))
@@ -56,7 +56,7 @@ export function useDaySwipe(pane: Ref<HTMLElement | null>, options: { canGoForwa
   onMounted(() => {
     gesture = createGesture({
       el: pane.value!,
-      gestureName: 'day-swipe',
+      gestureName: 'page-swipe',
       direction: 'x',
       maxAngle: MAX_ANGLE,
       threshold: THRESHOLD,
@@ -76,7 +76,7 @@ export function useDaySwipe(pane: Ref<HTMLElement | null>, options: { canGoForwa
         if (!tracking) return
         if (d.event.cancelable) d.event.preventDefault()
         const x = base + d.deltaX
-        offset.value = x < 0 && !options.canGoForward() ? rubber(x, width) : x
+        offset.value = x !== 0 && !options.canGo(x > 0 ? -1 : 1) ? rubber(x, width) : x
       },
       onEnd: (d) => {
         if (!tracking) return
@@ -85,7 +85,7 @@ export function useDaySwipe(pane: Ref<HTMLElement | null>, options: { canGoForwa
         const step = x > 0 ? -1 : 1
         const far = Math.abs(x) > width / 2
         const flick = Math.abs(d.velocityX) > FLICK && Math.sign(d.velocityX) === Math.sign(x) && Math.abs(d.deltaX) > 24
-        if ((far || flick) && (step === -1 || options.canGoForward())) land(step, offset.value)
+        if ((far || flick) && options.canGo(step)) land(step, offset.value)
         else slideTo(0)
       },
     })

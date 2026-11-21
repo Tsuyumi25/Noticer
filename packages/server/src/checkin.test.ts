@@ -269,6 +269,20 @@ describe('search', () => {
   })
 })
 
+describe('day counts', () => {
+  it('count entries per local day, the same days the journal shows them on, oldest first', async () => {
+    const { db, send } = setup()
+    for (const offset of [-3 * 86400, -3 * 86400 + 60, -86400, 0]) await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [], timeOffset: offset })
+    const perDay = new Map<string, number>()
+    for (const e of allEvents(db)) {
+      const key = new Date(e.eventAt * 1000).toLocaleDateString('sv-SE')
+      perDay.set(key, (perDay.get(key) ?? 0) + 1)
+    }
+    const counts = z.array(z.object({ date: z.string(), count: z.number() })).parse(await (await send('GET', '/api/days')).json())
+    expect(counts).toEqual([...perDay].sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count })))
+  })
+})
+
 describe('quick notes', () => {
   it('write only the tags picked, under the reserved id, and take no values', async () => {
     const { db, send } = setup()

@@ -2,17 +2,18 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/vue-query'
 import { CalendarDays, Images, Play, Search } from 'lucide-vue-next'
 import { PURE_CARD } from 'server/pure'
-import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { api } from '../api.ts'
 import { isVideo, isVisual, previewUrl } from '../attachments.ts'
 import { locale, t, tn, type MessageKey } from '../i18n/index.ts'
 import { clock } from '../time.ts'
+import { usePageSwipe } from '../pageSwipe.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
 import { openViewer } from '../viewer.ts'
 import AttachmentIcon from './AttachmentIcon.vue'
 import JournalCalendar from './JournalCalendar.vue'
 
-/** Finding a picture, a day or an entry: the gallery opens first; the calendar and search sit beside it. */
+/** Finding a picture, a day or an entry: the gallery opens first; the calendar and search sit beside it, a swipe away. */
 const props = defineProps<{ day: Date }>()
 const emit = defineEmits<{ pick: [day: string]; jump: [eventId: number, eventAt: number]; close: [] }>()
 
@@ -23,6 +24,17 @@ const tabs: { key: Tab; icon: Component; label: MessageKey }[] = [
   { key: 'search', icon: Search, label: 'finder.search' },
 ]
 const tab = ref<Tab>('gallery')
+
+// Swiping sideways turns to the tab beside this one.
+const pane = ref<HTMLElement | null>(null)
+const tabIndex = computed(() => tabs.findIndex((x) => x.key === tab.value))
+const swipe = usePageSwipe(pane, {
+  canGo: (step) => tabs[tabIndex.value + step] !== undefined,
+  go: async (step) => {
+    tab.value = tabs[tabIndex.value + step]!.key
+    await nextTick()
+  },
+})
 
 const { sheet, sheetStyle, backdrop, animated, leave, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } = useSheetDrag({ onRequestClose: () => leave() })
 // The sheet keeps its rounded top at rest; only its slide comes from the drag.
@@ -139,8 +151,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         ref="sheet"
         role="dialog"
         :aria-label="t(tabs.find((x) => x.key === tab)!.label)"
-        class="relative mx-auto flex w-full max-w-2xl flex-col rounded-t-2xl bg-white pt-1 shadow-xl"
-        :class="[tab === 'calendar' ? 'pb-[calc(0.75rem+env(safe-area-inset-bottom))]' : 'h-[calc(100dvh-56px)]', { 'sheet-animated': animated }]"
+        class="relative mx-auto flex h-[calc(100dvh-56px)] w-full max-w-2xl flex-col rounded-t-2xl bg-white pt-1 shadow-xl"
+        :class="{ 'sheet-animated': animated }"
         :style="slide"
         @touchstart="onTouchStart"
         @touchmove="onTouchMove"
@@ -155,47 +167,49 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </button>
         </div>
 
-        <JournalCalendar v-if="tab === 'calendar'" :day="props.day" @pick="pick" />
+        <div ref="pane" class="flex min-h-0 flex-1 touch-pan-y flex-col" :style="swipe.style.value">
+          <JournalCalendar v-if="tab === 'calendar'" :day="props.day" @pick="pick" />
 
-        <template v-else-if="tab === 'search'">
-          <div class="shrink-0 px-3 pb-2">
-            <input v-model="typed" v-focus type="search" class="h-11 w-full rounded-xl border border-zinc-300 px-3 text-base" :aria-label="t('finder.search')" />
-          </div>
-          <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
-            <p v-if="query && !searching && found?.length === 0" class="py-10 text-center text-sm text-zinc-400">{{ t('finder.noResults') }}</p>
-            <p v-else-if="total" class="px-3 pb-1 text-xs text-zinc-500">{{ tn('finder.results', total) }}</p>
-            <button v-for="e in found ?? []" :key="e.id" class="result" @click="jump(e.id, e.eventAt)">
-              <span class="node">{{ emojiOf(e.cardId) }}</span>
-              <span class="min-w-0">
-                <span class="block text-xs text-zinc-500">{{ dateTime(e.eventAt) }}</span>
-                <span v-if="shownTags(e.cardId, e.tags).length" class="mt-0.5 flex flex-wrap gap-1">
-                  <span v-for="tag in shownTags(e.cardId, e.tags)" :key="tag" class="tag">
-                    <template v-for="(p, i) in pieces(tag)" :key="i"><mark v-if="p.hit">{{ p.text }}</mark><template v-else>{{ p.text }}</template></template>
+          <template v-else-if="tab === 'search'">
+            <div class="shrink-0 px-3 pb-2">
+              <input v-model="typed" v-focus type="search" class="h-11 w-full rounded-xl border border-zinc-300 px-3 text-base" :aria-label="t('finder.search')" />
+            </div>
+            <div class="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
+              <p v-if="query && !searching && found?.length === 0" class="py-10 text-center text-sm text-zinc-400">{{ t('finder.noResults') }}</p>
+              <p v-else-if="total" class="px-3 pb-1 text-xs text-zinc-500">{{ tn('finder.results', total) }}</p>
+              <button v-for="e in found ?? []" :key="e.id" class="result" @click="jump(e.id, e.eventAt)">
+                <span class="node">{{ emojiOf(e.cardId) }}</span>
+                <span class="min-w-0">
+                  <span class="block text-xs text-zinc-500">{{ dateTime(e.eventAt) }}</span>
+                  <span v-if="shownTags(e.cardId, e.tags).length" class="mt-0.5 flex flex-wrap gap-1">
+                    <span v-for="tag in shownTags(e.cardId, e.tags)" :key="tag" class="tag">
+                      <template v-for="(p, i) in pieces(tag)" :key="i"><mark v-if="p.hit">{{ p.text }}</mark><template v-else>{{ p.text }}</template></template>
+                    </span>
+                  </span>
+                  <span v-if="e.note" class="note">
+                    <template v-for="(p, i) in pieces(e.note)" :key="i"><mark v-if="p.hit">{{ p.text }}</mark><template v-else>{{ p.text }}</template></template>
                   </span>
                 </span>
-                <span v-if="e.note" class="note">
-                  <template v-for="(p, i) in pieces(e.note)" :key="i"><mark v-if="p.hit">{{ p.text }}</mark><template v-else>{{ p.text }}</template></template>
-                </span>
-              </span>
-            </button>
-            <div ref="end" class="h-px" />
-          </div>
-        </template>
-
-        <div v-else class="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
-          <p v-if="media && media.length === 0" class="py-10 text-center text-sm text-zinc-400">{{ t('finder.noMedia') }}</p>
-          <section v-for="m in months" :key="m.title">
-            <h3 class="month">{{ m.title }}</h3>
-            <div class="wall">
-              <button v-for="{ index, item } in m.items" :key="item.id" :aria-label="item.name" @click="view(index)">
-                <img v-if="isVisual(item)" :src="previewUrl(item)" alt="" loading="lazy" decoding="async" />
-                <span v-else-if="!isVideo(item)" class="flex size-full flex-col items-center justify-center gap-1 px-1 text-zinc-500">
-                  <AttachmentIcon :attachment="item" :size="22" /><span class="w-full truncate text-center text-[11px]">{{ item.name }}</span>
-                </span>
-                <span v-if="isVideo(item)" class="play"><Play :size="20" /></span>
               </button>
+              <div ref="end" class="h-px" />
             </div>
-          </section>
+          </template>
+
+          <div v-else class="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
+            <p v-if="media && media.length === 0" class="py-10 text-center text-sm text-zinc-400">{{ t('finder.noMedia') }}</p>
+            <section v-for="m in months" :key="m.title">
+              <h3 class="month">{{ m.title }}</h3>
+              <div class="wall">
+                <button v-for="{ index, item } in m.items" :key="item.id" :aria-label="item.name" @click="view(index)">
+                  <img v-if="isVisual(item)" :src="previewUrl(item)" alt="" loading="lazy" decoding="async" />
+                  <span v-else-if="!isVideo(item)" class="flex size-full flex-col items-center justify-center gap-1 px-1 text-zinc-500">
+                    <AttachmentIcon :attachment="item" :size="22" /><span class="w-full truncate text-center text-[11px]">{{ item.name }}</span>
+                  </span>
+                  <span v-if="isVideo(item)" class="play"><Play :size="20" /></span>
+                </button>
+              </div>
+            </section>
+          </div>
         </div>
       </section>
     </div>

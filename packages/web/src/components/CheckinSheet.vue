@@ -140,6 +140,7 @@ function refresh() {
   queryClient.invalidateQueries({ queryKey: ['cardTags'] })
   queryClient.invalidateQueries({ queryKey: ['cardInputs'] })
   queryClient.invalidateQueries({ queryKey: ['media'] })
+  queryClient.invalidateQueries({ queryKey: ['days'] })
   queryClient.invalidateQueries({ queryKey: ['search'] })
   // Closed report sheets refetch now, so reopening one shows the change at once.
   queryClient.invalidateQueries({ queryKey: ['calendar'], refetchType: 'all' })

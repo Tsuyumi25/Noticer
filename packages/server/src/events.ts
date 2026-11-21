@@ -81,6 +81,15 @@ export function searchEvents(db: DB, text: string, limit: number, after: SearchC
   }
 }
 
+/** How many entries each local day holds, oldest day first; days without any are left out. */
+export function dayCounts(db: DB): { date: string; count: number }[] {
+  return db
+    .prepare<[], { date: string; count: number }>(
+      `SELECT date(event_at, 'unixepoch', 'localtime') AS date, COUNT(*) AS count FROM events GROUP BY 1 ORDER BY 1`,
+    )
+    .all()
+}
+
 /** A picture or video someone attached, with the event it sits on. */
 export interface MediaItem extends Attachment {
   eventId: number

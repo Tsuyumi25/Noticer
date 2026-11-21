@@ -1,6 +1,8 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 const DAMPING = 0.6
+/** Pixels the finger travels before the pull is judged: down pulls the sheet, sideways belongs to whatever swipes. */
+const AXIS_THRESHOLD = 10
 
 interface SheetDragOptions {
   /** A pull far or fast enough asks to close; the sheet decides whether to leave. */
@@ -39,6 +41,8 @@ export function useSheetDrag({ onRequestClose, canDrag }: SheetDragOptions) {
   const isLeaveEnd = (e: TransitionEvent) => leaving.value && e.target === sheet.value && e.propertyName === 'transform'
 
   let dragging = false
+  let judged = false
+  let startX = 0
   let startY = 0
   let startTime = 0
 
@@ -54,6 +58,8 @@ export function useSheetDrag({ onRequestClose, canDrag }: SheetDragOptions) {
     const touch = e.touches[0]
     if (leaving.value || !touch || e.touches.length > 1) return
     dragging = (canDrag?.(e) ?? true) && atTop(e.target)
+    judged = false
+    startX = touch.clientX
     startY = touch.clientY
     startTime = e.timeStamp
   }
@@ -62,6 +68,12 @@ export function useSheetDrag({ onRequestClose, canDrag }: SheetDragOptions) {
     const touch = e.touches[0]
     if (!dragging || !touch) return
     const dy = touch.clientY - startY
+    if (!judged) {
+      const dx = touch.clientX - startX
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < AXIS_THRESHOLD) return
+      judged = true
+      if (Math.abs(dx) > Math.abs(dy)) return void (dragging = false)
+    }
     if (dy <= 0) {
       // Pushing up scrolls the content instead.
       if (offset.value === 0) dragging = false

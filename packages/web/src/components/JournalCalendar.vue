@@ -1,98 +1,100 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
-import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { api } from '../api.ts'
-import { locale, t } from '../i18n/index.ts'
+import { locale } from '../i18n/index.ts'
 import { dayKey } from '../time.ts'
 
+/** Every month with entries up to this one, oldest on top like the month report; it opens on the day being read. */
 const props = defineProps<{ day: Date }>()
 const emit = defineEmits<{ pick: [day: string] }>()
 
-const month = ref(new Date(props.day.getFullYear(), props.day.getMonth(), 1))
-const today = new Date()
-const todayKey = dayKey(today)
-const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1).getTime()
+const todayKey = dayKey(new Date())
+const selected = computed(() => dayKey(props.day))
 
-const shift = (n: number) => (month.value = new Date(month.value.getFullYear(), month.value.getMonth() + n, 1))
-
-const title = computed(() => new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: 'long' }).format(month.value))
-
-// Weeks start on Monday; 2024-01-01 was one.
+// Weeks start on Sunday, as in the month report; 2023-01-01 was one.
 const weekdays = computed(() =>
-  Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(locale.value, { weekday: 'narrow' }).format(new Date(2024, 0, 1 + i))),
+  Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(locale.value, { weekday: 'narrow' }).format(new Date(2023, 0, 1 + i))),
 )
 
-/** Six full weeks around the month. */
-const cells = computed(() => {
-  const first = month.value
-  const start = new Date(first.getFullYear(), first.getMonth(), 1 - ((first.getDay() + 6) % 7))
-  return Array.from({ length: 42 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i))
-})
-
 const { data: counts } = useQuery({
-  queryKey: computed(() => ['events', 'month', dayKey(month.value)]),
+  queryKey: ['days'],
   queryFn: async () => {
-    const from = cells.value[0]!.getTime() / 1000
-    const last = cells.value[41]!
-    const to = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1).getTime() / 1000
-    const res = await api.events.$get({ query: { from: String(from), to: String(to) } })
-    if (!res.ok) throw new Error(`events: ${res.status}`)
-    const perDay = new Map<string, number>()
-    for (const e of await res.json()) {
-      const key = dayKey(new Date(e.eventAt * 1000))
-      perDay.set(key, (perDay.get(key) ?? 0) + 1)
-    }
-    return perDay
+    const res = await api.days.$get()
+    if (!res.ok) throw new Error(`days: ${res.status}`)
+    return new Map((await res.json()).map((d) => [d.date, d.count]))
   },
 })
 
-const selected = computed(() => dayKey(props.day))
+interface Month {
+  key: string
+  label: string
+  /** Empty cells before the 1st, so it lands under its weekday. */
+  lead: number
+  days: string[]
+}
+
+const months = computed<Month[]>(() => {
+  if (!counts.value) return []
+  const format = new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: 'long' })
+  const now = new Date()
+  const first = [...counts.value.keys()][0] ?? todayKey
+  const list: Month[] = []
+  for (let m = new Date(`${first.slice(0, 7)}-01T00:00`); m <= now; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+    const length = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate()
+    list.push({
+      key: dayKey(m).slice(0, 7),
+      label: format.format(m),
+      lead: m.getDay(),
+      days: Array.from({ length }, (_, i) => dayKey(new Date(m.getFullYear(), m.getMonth(), i + 1))),
+    })
+  }
+  return list
+})
+
+// Opens on the day being read: this month sits at the bottom, an older day in the middle.
+const scroller = ref<HTMLElement | null>(null)
+watch(
+  () => months.value.length,
+  async (count, before) => {
+    if (count === 0 || before) return
+    await nextTick()
+    const el = scroller.value
+    if (!el) return
+    if (selected.value.slice(0, 7) === todayKey.slice(0, 7)) el.scrollTop = el.scrollHeight
+    else el.querySelector(`[data-day="${selected.value}"]`)?.scrollIntoView({ block: 'center' })
+  },
+  { immediate: true, flush: 'post' },
+)
 </script>
 
 <template>
-  <div class="px-2">
-    <header class="flex items-center justify-between">
-      <button class="nav" :aria-label="t('journal.prevMonth')" @click="shift(-1)"><ChevronLeft :size="22" /></button>
-      <h2 class="text-[17px] font-semibold">{{ title }}</h2>
-      <button class="nav" :aria-label="t('journal.nextMonth')" :disabled="month.getTime() >= thisMonth" @click="shift(1)">
-        <ChevronRight :size="22" />
-      </button>
-    </header>
-    <div class="grid grid-cols-7 gap-0.5">
-      <span v-for="w in weekdays" :key="w" class="pb-1 text-center text-[11px] text-zinc-400">{{ w }}</span>
-      <button
-        v-for="cell in cells"
-        :key="cell.getTime()"
-        class="cell"
-        :class="{
-          out: cell.getMonth() !== month.getMonth(),
-          on: dayKey(cell) === selected,
-          today: dayKey(cell) === todayKey,
-        }"
-        :disabled="dayKey(cell) > todayKey"
-        @click="emit('pick', dayKey(cell))"
-      >
-        <b>{{ cell.getDate() }}</b>
-        <i>{{ counts?.get(dayKey(cell)) ?? '' }}</i>
-      </button>
-    </div>
+  <div ref="scroller" class="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+    <section v-for="month in months" :key="month.key" class="pt-4 first:pt-1">
+      <h3 class="mb-2 px-1 text-base font-semibold text-zinc-800">{{ month.label }}</h3>
+      <div class="grid grid-cols-7 gap-0.5 pb-1 text-center text-[11px] text-zinc-400">
+        <span v-for="(w, i) in weekdays" :key="i">{{ w }}</span>
+      </div>
+      <div class="grid grid-cols-7 gap-0.5">
+        <span v-for="n in month.lead" :key="`lead-${n}`" />
+        <button
+          v-for="d in month.days"
+          :key="d"
+          class="cell"
+          :class="{ on: d === selected, today: d === todayKey }"
+          :data-day="d"
+          :disabled="d > todayKey"
+          @click="emit('pick', d)"
+        >
+          <b>{{ Number(d.slice(8)) }}</b>
+          <i>{{ counts?.get(d) ?? '' }}</i>
+        </button>
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.nav {
-  display: inline-flex;
-  width: 44px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  color: #71717a;
-}
-.nav:disabled {
-  opacity: 0.25;
-}
 .cell {
   display: flex;
   min-height: 46px;
@@ -111,9 +113,6 @@ const selected = computed(() => dayKey(props.day))
   font: 600 10px ui-monospace, 'SF Mono', Menlo, monospace;
   font-style: normal;
   opacity: 0.6;
-}
-.cell.out {
-  color: #a1a1aa;
 }
 .cell:disabled {
   opacity: 0.3;
