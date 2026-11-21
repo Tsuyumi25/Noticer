@@ -149,6 +149,7 @@ export default {
   'journal.nextMonth': '次の月',
 
   'review.dayEmpty': 'この日の記録はありません',
+  'review.settings': 'カード設定',
 
   'rules.save': '保存',
   'rules.saveFailed': '保存できませんでした（{status}）',

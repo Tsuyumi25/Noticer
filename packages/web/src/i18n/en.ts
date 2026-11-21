@@ -149,6 +149,7 @@ export default {
   'journal.nextMonth': 'Next month',
 
   'review.dayEmpty': 'Nothing recorded this day',
+  'review.settings': 'Card settings',
 
   'rules.save': 'Save',
   'rules.saveFailed': 'Could not save ({status})',

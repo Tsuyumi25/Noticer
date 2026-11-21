@@ -148,6 +148,7 @@ export default {
   'journal.nextMonth': '下個月',
 
   'review.dayEmpty': '這天沒有紀錄',
+  'review.settings': '卡片設定',
 
   'rules.save': '儲存',
   'rules.saveFailed': '儲存失敗（{status}）',

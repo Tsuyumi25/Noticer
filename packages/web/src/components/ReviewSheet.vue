@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
-import { ChevronDown } from 'lucide-vue-next'
+import { ChevronDown, Settings } from 'lucide-vue-next'
 import type { CalendarDay } from 'server/review'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '../api.ts'
@@ -9,6 +9,7 @@ import { useSheetDrag } from '../sheetDrag.ts'
 import { dayKey } from '../time.ts'
 import SleepAnalysis from '../plugins/sleep/SleepAnalysis.vue'
 import DayEventsSheet from './DayEventsSheet.vue'
+import RulesSheet from './RulesSheet.vue'
 
 /** `sleep`: the card is half of the sleep pair, so the sheet opens on the rhythm analysis with the months beside it. */
 const props = defineProps<{ cardId: string; sleep?: boolean }>()
@@ -71,6 +72,7 @@ function show(value: CalendarDay['value']): string {
 const showDelta = (d: number) => `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d).toFixed(data.value?.card.decimals ?? 0)}`
 
 const selected = ref<string | null>(null)
+const editingRules = ref(false)
 const picked = ref<'analysis' | 'calendar' | null>(null)
 const tab = computed(() => picked.value ?? (props.sleep ? 'analysis' : 'calendar'))
 
@@ -79,7 +81,7 @@ function onTransitionEnd(e: TransitionEvent) {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && selected.value === null) leave()
+  if (e.key === 'Escape' && selected.value === null && !editingRules.value) leave()
 }
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
@@ -101,11 +103,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         @transitionend="onTransitionEnd"
       >
         <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
-        <header class="flex shrink-0 items-center gap-1 py-1 pr-4 pl-1">
+        <header class="flex shrink-0 items-center gap-1 py-1 pr-1 pl-1">
           <button class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500" :aria-label="t('common.close')" @click="leave">
             <ChevronDown :size="24" />
           </button>
-          <h2 v-if="data" class="text-lg font-semibold">{{ data.card.emoji }} {{ data.card.name }}</h2>
+          <h2 v-if="data" class="flex-1 text-lg font-semibold">{{ data.card.emoji }} {{ data.card.name }}</h2>
+          <button
+            v-if="!sleep"
+            class="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500"
+            :aria-label="t('review.settings')"
+            @click="editingRules = true"
+          >
+            <Settings :size="22" />
+          </button>
         </header>
         <div v-if="sleep" class="tabs mx-3 mb-1 shrink-0">
           <button :class="{ on: tab === 'analysis' }" @click="picked = 'analysis'">{{ t('sleep.analysis') }}</button>
@@ -141,6 +151,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         </div>
       </section>
 
+      <RulesSheet v-if="editingRules" :card-id="cardId" @close="editingRules = false" />
       <DayEventsSheet v-if="selected && data" :card-id="cardId" :card-tag="data.card.name" :date="selected" @close="selected = null" />
     </div>
   </Teleport>
