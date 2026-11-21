@@ -44,6 +44,7 @@ data/             app.db（events）＋ config.json（卡片設定，每張卡�
 pnpm dev                          server :3040 + web :5174
 pnpm test                         Vitest
 pnpm typecheck                    tsc（server）+ vue-tsc（web）
+pnpm --filter web icons           從 packages/web/icon/ 的兩個 SVG 產生 public/ 裡所有尺寸的 icon
 pnpm import-backup <backup-dir>   開發用：用舊版的月份備份 JSON（含 config.json）重灌 data/，舊版的 tracker 會轉成 rules；備份不含附件，會清空 attachments/
 pnpm pull-prod <old-app-url>      開發用：從舊版的 API 拉最新的 events、設定與圖片，重灌 data/，舊版的 tracker 會轉成 rules
 ```
