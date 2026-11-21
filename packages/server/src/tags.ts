@@ -1,11 +1,6 @@
 import type { CardConfig, Config, TagGroup } from './config.ts'
 import type { DB } from './db.ts'
 
-/** Cards with a bucket share their parent's tag groups; the rest own the groups under their own tag. */
-export function cardRoot(card: Pick<CardConfig, 'tag' | 'bucket'>): string {
-  return card.bucket ?? card.tag
-}
-
 /** A tag's option list: the groups pinned on it and every other tag that has appeared with it, most used first. */
 export interface RootTags {
   groups: TagGroup[]
@@ -38,15 +33,12 @@ export function allTags(db: DB): string[] {
 }
 
 export interface CardTags extends RootTags {
+  /** Attached on submit without being picked. */
   root: string
-  /** Attached on submit without being picked: the card's tag and its bucket. */
-  auto: string[]
   hidden: string[]
   defaults: string[]
 }
 
 export function cardTags(db: DB, config: Config, card: CardConfig): CardTags {
-  const root = cardRoot(card)
-  const auto = [...new Set([card.tag, ...(card.bucket ? [card.bucket] : [])])]
-  return { root, auto, ...rootTags(db, config, root, auto), hidden: card.hiddenTags ?? [], defaults: card.defaultTags ?? [] }
+  return { root: card.root, ...rootTags(db, config, card.root), hidden: card.hiddenTags ?? [], defaults: card.defaultTags ?? [] }
 }

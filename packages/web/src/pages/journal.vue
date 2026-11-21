@@ -83,7 +83,7 @@ interface Chip {
 
 /** Values and the config's choices; facts kept from the old app that nothing models stay hidden. */
 function chipsOf(card: CardConfig | undefined, facts: Record<string, string | number | boolean>): Chip[] {
-  const specs = card ? config.value?.tagGroups[card.bucket ?? card.tag]?.values ?? {} : {}
+  const specs = card ? config.value?.tagGroups[card.root]?.values ?? {} : {}
   return Object.entries(facts).flatMap(([key, value]): Chip[] => {
     const parsed = parseValueKey(key)
     if (parsed && typeof value === 'number') {
@@ -101,8 +101,7 @@ const rows = computed(() =>
   (events.value ?? []).map((event, i, all) => {
     const card = cards.value.get(event.cardId)
     const quick = event.cardId === PURE_CARD
-    const own = new Set([card?.tag, card?.bucket])
-    const tags = event.tags.filter((tag) => !own.has(tag)).map((label) => ({ label, color: colors.value.get(label) }))
+    const tags = event.tags.filter((tag) => tag !== card?.root).map((label) => ({ label, color: colors.value.get(label) }))
     const previous = all[i - 1]
     const gap = previous ? event.eventAt - previous.eventAt : 0
     return {
@@ -184,7 +183,7 @@ function pickDay(key: string) {
     <CheckinSheet
       v-if="editing"
       :key="editing.event.id"
-      :card="{ id: editing.card.id, name: editing.card.tag, emoji: editing.card.emoji }"
+      :card="{ id: editing.card.id, name: editing.card.name, emoji: editing.card.emoji }"
       :event="editing.event"
       @close="editing = null"
     />

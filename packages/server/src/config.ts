@@ -78,10 +78,11 @@ const choiceInputSchema = z.object({
 
 const factInputSchema = choiceInputSchema
 
+/** A card is a quick note with one tag locked in: `root` always goes on its records and brings that tag's list; `defaultTags` start picked and can be taken off. */
 const cardSchema = z.object({
   id: z.string(),
-  tag: z.string(),
-  bucket: z.string().optional(),
+  name: z.string().trim().min(1),
+  root: z.string().trim().min(1),
   defaultTags: z.array(z.string()).optional(),
   hiddenTags: z.array(z.string()).optional(),
   emoji: z.string(),
@@ -132,7 +133,7 @@ export const configSchema = z
         if (!(key in config.factInputs)) ctx.addIssue({ code: 'custom', message: `card ${card.id} uses unknown fact ${key}` })
       }
       const measure = card.rules.back?.measure
-      if (measure && 'unit' in measure && !rootUnits(config, card.bucket ?? card.tag).includes(measure.unit)) {
+      if (measure && 'unit' in measure && !rootUnits(config, card.root).includes(measure.unit)) {
         ctx.addIssue({ code: 'custom', message: `card ${card.id} measures ${measure.unit}, which no tag under its root carries` })
       }
     }

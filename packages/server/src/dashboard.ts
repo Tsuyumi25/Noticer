@@ -2,7 +2,6 @@ import type { CardConfig, Config } from './config.ts'
 import type { EventRecord } from './events.ts'
 import { evaluateDays, evaluateNow, type CardStatus, type DailyStrip, type NowResult } from './rules.ts'
 import { evaluateSleep, SLEEP_CARD, WAKE_CARD, type SleepPair } from './sleep.ts'
-import { cardRoot } from './tags.ts'
 
 export interface CardModel {
   id: string
@@ -36,19 +35,18 @@ function urgency(card: CardModel): number {
   return card.mode === 'soon' ? 1 / Math.max(ratio, 0.001) : ratio
 }
 
-export function cardModel(card: Pick<CardConfig, 'id' | 'tag' | 'bucket' | 'emoji' | 'rules'>, events: EventRecord[], now: number): CardModel {
-  const root = cardRoot(card)
-  const result = evaluateNow(card.rules, root, events, now)
+export function cardModel(card: Pick<CardConfig, 'id' | 'name' | 'root' | 'emoji' | 'rules'>, events: EventRecord[], now: number): CardModel {
+  const result = evaluateNow(card.rules, card.root, events, now)
   return {
     id: card.id,
-    name: card.tag,
+    name: card.name,
     emoji: card.emoji,
     status: result.status,
     mode: result.mode,
     progress: result.progress,
     nowHours: result.mode !== null && result.lastAt !== null ? (now - result.lastAt) / 3600 : null,
     maxHours: result.maxHours,
-    strip: evaluateDays(card.rules, root, events, now),
+    strip: evaluateDays(card.rules, card.root, events, now),
   }
 }
 
@@ -70,8 +68,8 @@ export function buildDashboard(config: Config, events: EventRecord[], now: numbe
     sleep: hasSleep
       ? {
           ...evaluateSleep(events, now),
-          sleepCard: { id: sleepCard.id, name: sleepCard.tag, emoji: sleepCard.emoji },
-          wakeCard: { id: wakeCard.id, name: wakeCard.tag, emoji: wakeCard.emoji },
+          sleepCard: { id: sleepCard.id, name: sleepCard.name, emoji: sleepCard.emoji },
+          wakeCard: { id: wakeCard.id, name: wakeCard.name, emoji: wakeCard.emoji },
         }
       : null,
     urgent: cards.filter((c) => c.status === 'danger' || c.status === 'warning'),

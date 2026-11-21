@@ -13,7 +13,7 @@ export function tagColors(config: Pick<Config, 'tagGroups'>): Map<string, string
 
 /** A card's colour: its root's first group, otherwise a palette colour fixed by the card id. */
 export function cardColor(config: Pick<Config, 'tagGroups'>, card: CardConfig): string {
-  const first = config.tagGroups[card.bucket ?? card.tag]?.groups[0]?.color
+  const first = config.tagGroups[card.root]?.groups[0]?.color
   if (first) return first
   let hash = 0
   for (const ch of card.id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0

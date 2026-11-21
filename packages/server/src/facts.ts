@@ -1,6 +1,5 @@
 import type { CardConfig, Config, FactInput, ValueSpec } from './config.ts'
 import type { DB } from './db.ts'
-import { cardRoot } from './tags.ts'
 import { parseValueKey, valueKey } from './values.ts'
 
 export type FactRow = { k: string; type: 'integer' | 'real' | 'text'; value: number | string }
@@ -49,9 +48,8 @@ function keptShare(spec: ValueSpec, own: number[], fallback: number | null): num
 }
 
 export function cardInputs(db: DB, config: Config, card: CardConfig): CardInputs {
-  const root = cardRoot(card)
+  const root = card.root
   const specs = Object.entries(config.tagGroups[root]?.values ?? {})
-  const auto = new Set([card.tag, ...(card.bucket ? [card.bucket] : [])])
   const rows = db
     .prepare<[string], { k: string; value: number }>(
       `SELECT f.k, f.value FROM checkin_facts f JOIN events e ON e.id = f.checkin_id
@@ -78,10 +76,10 @@ export function cardInputs(db: DB, config: Config, card: CardConfig): CardInputs
       ...rest,
       ...(pinned === undefined ? {} : { pinned }),
       tag,
-      auto: auto.has(tag),
+      auto: tag === root,
       default: fallback,
       candidates,
-      open: auto.has(tag) && (own.length === 0 || keptShare(spec, own, fallback) < 0.5),
+      open: tag === root && (own.length === 0 || keptShare(spec, own, fallback) < 0.5),
     }
   })
   const choices = (card.facts ?? []).map((key) => ({ ...config.factInputs[key]!, key }))
@@ -92,7 +90,7 @@ export type FactsResult = { ok: true; rows: FactRow[] } | { ok: false; status: 4
 
 /** Values come as `tag:unit` keys for tags in the event; choices under the card's fact keys. */
 export function readFacts(config: Config, card: CardConfig, given: Record<string, number | string>, tags: string[]): FactsResult {
-  const specs = config.tagGroups[cardRoot(card)]?.values ?? {}
+  const specs = config.tagGroups[card.root]?.values ?? {}
   const choices = card.facts ?? []
   const rows: FactRow[] = []
   for (const [k, value] of Object.entries(given)) {

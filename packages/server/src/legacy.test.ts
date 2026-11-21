@@ -51,6 +51,15 @@ describe('convertLegacyConfig', () => {
     expect(converted.cards[0]).not.toHaveProperty('trackerId')
   })
 
+  it('names a card after its old tag and locks in its bucket as the root, the old tag starting picked', () => {
+    const card = (id: string) => converted.cards.find((c) => c.id === id)
+    expect(card('sunscreen')).toMatchObject({ name: '防曬', root: '護膚', defaultTags: ['防曬'] })
+    expect(card('coffee')).toMatchObject({ name: '喝咖啡', root: '喝咖啡' })
+    expect(card('coffee')).not.toHaveProperty('defaultTags')
+    expect(card('coffee')).not.toHaveProperty('tag')
+    expect(card('sunscreen')).not.toHaveProperty('bucket')
+  })
+
   it('reads a cooldown as "too soon" until its first ready stage, and gives looking back its own find', () => {
     expect(rules('coffee')).toEqual({
       find: { match: 'all', blocks: [] },
@@ -101,10 +110,10 @@ describe('convertLegacyValues', () => {
   })
   const legacyConfig = {
     cards: [
-      { id: 'practice', tag: '練習', emoji: '🎹', facts: ['duration_min'], rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
-      { id: 'weight', tag: '體重', emoji: '⚖️', facts: ['weight_kg'], rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
-      { id: 'water_plants', tag: '澆花', emoji: '🪴', defaultTags: ['350cc'], rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
-      { id: 'snacks', tag: '甜點', emoji: '🍪', rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
+      { id: 'practice', name: '練習', root: '練習', emoji: '🎹', facts: ['duration_min'], rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
+      { id: 'weight', name: '體重', root: '體重', emoji: '⚖️', facts: ['weight_kg'], rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
+      { id: 'water_plants', name: '澆花', root: '澆花', emoji: '🪴', defaultTags: ['350cc'], rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
+      { id: 'snacks', name: '甜點', root: '甜點', emoji: '🍪', rules: { find: { match: 'all', blocks: [] }, now: {}, back: null } },
     ],
     tagGroups: {
       練習: { groups: [{ name: '類型', color: '#000', tags: [{ label: '鋼琴', emoji: '' }, { label: '吉他', emoji: '' }] }] },

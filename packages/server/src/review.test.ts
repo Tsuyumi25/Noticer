@@ -13,9 +13,9 @@ const unjudged: Rules = { find: { match: 'all', blocks: [] }, now: {}, back: nul
 const config: Config = {
   ...emptyConfig,
   cards: [
-    { id: 'coffee', tag: '喝咖啡', emoji: '☕', rules: { ...unjudged, back: { span: 'day', measure: { kind: 'times' }, want: { kind: 'atLeast', n: 2 } } } },
-    { id: 'weight', tag: '體重', emoji: '⚖️', rules: unjudged },
-    { id: 'today', tag: '今日', emoji: '📔', rules: unjudged, facts: ['mood_emoji'] },
+    { id: 'coffee', name: '喝咖啡', root: '喝咖啡', emoji: '☕', rules: { ...unjudged, back: { span: 'day', measure: { kind: 'times' }, want: { kind: 'atLeast', n: 2 } } } },
+    { id: 'weight', name: '體重', root: '體重', emoji: '⚖️', rules: unjudged },
+    { id: 'today', name: '今日', root: '今日', emoji: '📔', rules: unjudged, facts: ['mood_emoji'] },
   ],
   tagGroups: { 體重: { groups: [], values: { 體重: { unit: 'kg', decimals: 1, keep: 'latest' } } } },
   factInputs: {

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
-import { Check, ChevronRight } from 'lucide-vue-next'
-import { computed } from 'vue'
+import { Check, ChevronRight, Plus } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.ts'
+import CardBuilderSheet from '../components/CardBuilderSheet.vue'
 import RulesSheet from '../components/RulesSheet.vue'
 import { locale, LOCALES, setLocale, t, type Locale } from '../i18n/index.ts'
 
@@ -22,6 +23,7 @@ const route = useRoute()
 const router = useRouter()
 const editing = computed(() => (typeof route.query.card === 'string' ? route.query.card : null))
 const openCard = (cardId: string) => router.push({ query: { card: cardId } })
+const building = ref(false)
 function closeCard() {
   if (window.history.state?.back) router.back()
   else router.replace({ query: {} })
@@ -48,6 +50,11 @@ function closeCard() {
             <ChevronRight v-else :size="20" class="text-zinc-400" />
           </button>
         </li>
+        <li>
+          <button class="flex h-12 w-full items-center gap-2 px-4 text-indigo-600" @click="building = true">
+            <Plus :size="20" />{{ t('settings.addCard') }}
+          </button>
+        </li>
       </ul>
     </section>
 
@@ -63,6 +70,7 @@ function closeCard() {
       </ul>
     </section>
 
+    <CardBuilderSheet v-if="building" @close="building = false" />
     <RulesSheet v-if="editing" :key="editing" :card-id="editing" @close="closeCard" />
   </main>
 </template>

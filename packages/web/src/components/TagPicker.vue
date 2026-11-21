@@ -59,15 +59,14 @@ watch(
   { immediate: true },
 )
 
-const auto = computed(() => new Set(data.value?.auto ?? []))
 const selected = computed(() => new Set(props.modelValue ?? []))
 const grouped = computed(() => new Set(groups.value.flatMap((g) => g.tags.map((t) => t.label))))
 
 // Older settings also stored hidden tags as "group.label".
 const isHidden = (label: string) => hidden.value.some((h) => h === label || h.endsWith(`.${label}`))
-const shown = (label: string) => !auto.value.has(label) && (props.editing || !isHidden(label))
-/** Tags the card attaches by itself; only edit mode lists them, to set what number they carry. */
-const autoTags = computed(() => data.value?.auto ?? [])
+const shown = (label: string) => label !== data.value?.root && (props.editing || !isHidden(label))
+/** The root the card attaches by itself; only edit mode lists it, to set what number it carries. */
+const autoTags = computed(() => (data.value ? [data.value.root] : []))
 
 const specOf = computed(() => new Map((props.values ?? []).map((v) => [v.tag, v])))
 /** The number a value chip shows: what was set for a picked tag, otherwise what picking it would set. */

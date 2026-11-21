@@ -37,7 +37,7 @@ const periodicTrackerSchema = z.discriminatedUnion('type', [
 ])
 
 const legacySchema = z.object({
-  cards: z.array(z.object({ id: z.string(), tag: z.string(), bucket: z.string().optional(), trackerId: z.string().nullable() }).passthrough()),
+  cards: z.array(z.object({ id: z.string(), tag: z.string(), bucket: z.string().optional(), defaultTags: z.array(z.string()).optional(), trackerId: z.string().nullable() }).passthrough()),
   trackersStatus: z.array(statusTrackerSchema),
   trackersPeriodic: z.array(periodicTrackerSchema),
 })
@@ -127,7 +127,8 @@ function toBack(tracker: PeriodicTracker, where: string): Omit<BackRule, 'find'>
 
 /**
  * Turns the old app's config into this app's: each card carries its own rules; trackers no card uses are dropped, and
- * so is the old quick-note card, since quick notes are no card here.
+ * so is the old quick-note card, since quick notes are no card here. A card's old tag becomes its name, its bucket (or
+ * the tag when it had none) its root, and a tag under a bucket starts picked instead of always attached.
  */
 export function convertLegacyConfig(raw: unknown): RawConfig {
   const { cards, trackersStatus, trackersPeriodic, ...rest } = raw as Record<string, unknown>
@@ -136,8 +137,8 @@ export function convertLegacyConfig(raw: unknown): RawConfig {
   const periodic = new Map(legacy.trackersPeriodic.map((t) => [t.id, t]))
   return {
     ...rest,
-    cards: legacy.cards.filter((card) => card.id !== PURE_CARD).map(({ trackerId, ...card }) => {
-      const root = card.bucket ?? card.tag
+    cards: legacy.cards.filter((card) => card.id !== PURE_CARD).map(({ trackerId, tag, bucket, ...card }) => {
+      const root = bucket ?? tag
       const nowTracker = trackerId ? status.get(trackerId) : undefined
       const backTracker = periodic.get(card.id)
       const find = nowTracker
@@ -151,7 +152,8 @@ export function convertLegacyConfig(raw: unknown): RawConfig {
         back = { ...toBack(backTracker, `tracker ${backTracker.id}`), ...(JSON.stringify(own) === JSON.stringify(find) ? {} : { find: own }) }
       }
       const rules: Rules = { find, now: nowTracker ? toNow(nowTracker) : {}, back }
-      return { ...card, rules }
+      const defaultTags = bucket ? [...new Set([tag, ...(card.defaultTags ?? [])])] : (card.defaultTags ?? [])
+      return { ...card, name: tag, root, ...(defaultTags.length ? { defaultTags } : {}), rules }
     }),
   }
 }
@@ -177,8 +179,7 @@ export function convertLegacyValues(raw: RawConfig, records: BackupRecord[]): { 
   const config: RawConfig = structuredClone(raw)
   config.tagGroups ??= {}
   const tagGroups = config.tagGroups
-  const cards = new Map(config.cards.map((c) => [c.id, c as { id: string; tag: string; bucket?: string; facts?: string[]; defaultTags?: string[]; hiddenTags?: string[] }]))
-  const rootOf = (c: { tag: string; bucket?: string }) => c.bucket ?? c.tag
+  const cards = new Map(config.cards.map((c) => [c.id, c as { id: string; name: string; root: string; facts?: string[]; defaultTags?: string[]; hiddenTags?: string[] }]))
   const declare = (root: string, tag: string, spec: ValueSpec) => {
     const entry = (tagGroups[root] ??= { groups: [] })
     const values = (entry.values ??= {}) as Record<string, ValueSpec>
@@ -186,7 +187,7 @@ export function convertLegacyValues(raw: RawConfig, records: BackupRecord[]): { 
   }
 
   for (const card of cards.values()) {
-    const root = rootOf(card)
+    const root = card.root
     for (const key of card.facts ?? []) {
       const legacy = LEGACY_NUMBERS[key]
       if (legacy?.on === 'root') declare(root, root, legacy.spec)
@@ -216,8 +217,9 @@ export function convertLegacyValues(raw: RawConfig, records: BackupRecord[]): { 
   const converted = records.map((r): BackupRecord => {
     const card = cards.get(r.card_id)
     if (!card) return r
-    const root = rootOf(card)
-    const auto = new Set([card.tag, ...(card.bucket ? [card.bucket] : [])])
+    const root = card.root
+    // The old app attached the card's tag, now its name, and its bucket, now its root.
+    const auto = new Set([card.root, card.name])
     const tags: string[] = []
     const facts: BackupRecord['facts'] = {}
     for (const t of r.tags) {

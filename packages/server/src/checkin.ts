@@ -8,7 +8,7 @@ export function pickedTags(picked: string[]): string[] {
 }
 
 export function checkinTags(card: CardConfig, picked: string[]): string[] {
-  return [...new Set([card.tag, ...(card.bucket ? [card.bucket] : []), ...pickedTags(picked)])]
+  return [...new Set([card.root, ...pickedTags(picked)])]
 }
 
 interface CheckinInput {

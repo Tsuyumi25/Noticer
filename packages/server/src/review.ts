@@ -1,11 +1,10 @@
 import { rootUnits, type CardConfig, type Config } from './config.ts'
 import type { EventRecord, FactValue } from './events.ts'
 import { backFind, evaluateDays, matchesFind, type DailyState } from './rules.ts'
-import { cardRoot } from './tags.ts'
 import { valuesIn } from './values.ts'
 
 export function reportCounts(card: CardConfig, event: EventRecord): boolean {
-  return matchesFind(backFind(card.rules), cardRoot(card), event)
+  return matchesFind(backFind(card.rules), card.root, event)
 }
 
 export interface CalendarDay {
@@ -29,7 +28,7 @@ const dateKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 const unitDecimals = (config: Config, card: CardConfig, unit: string) =>
-  Math.max(0, ...Object.values(config.tagGroups[cardRoot(card)]?.values ?? {}).filter((v) => v.unit === unit).map((v) => v.decimals))
+  Math.max(0, ...Object.values(config.tagGroups[card.root]?.values ?? {}).filter((v) => v.unit === unit).map((v) => v.decimals))
 
 function measuredDecimals(config: Config, card: CardConfig): number | null {
   const measure = card.rules.back?.measure
@@ -38,8 +37,8 @@ function measuredDecimals(config: Config, card: CardConfig): number | null {
 
 /** An unjudged card shows the last value of a unit its tags replace rather than add up, such as a weight. */
 function shownUnit(config: Config, card: CardConfig): string | null {
-  const specs = Object.values(config.tagGroups[cardRoot(card)]?.values ?? {})
-  return rootUnits(config, cardRoot(card)).find((u) => specs.some((s) => s.unit === u && s.keep === 'latest')) ?? null
+  const specs = Object.values(config.tagGroups[card.root]?.values ?? {})
+  return rootUnits(config, card.root).find((u) => specs.some((s) => s.unit === u && s.keep === 'latest')) ?? null
 }
 
 export function cardCalendar(config: Config, card: CardConfig, events: EventRecord[], now: number): CardCalendar {
@@ -58,7 +57,7 @@ export function cardCalendar(config: Config, card: CardConfig, events: EventReco
   }
 
   const judged = card.rules.back !== null
-  const strip = evaluateDays(card.rules, cardRoot(card), events, now, days)
+  const strip = evaluateDays(card.rules, card.root, events, now, days)
   const unit = judged ? null : shownUnit(config, card)
   const choiceFact = (card.facts ?? [])[0]
   const decimals = unit ? unitDecimals(config, card, unit) : 0
@@ -67,7 +66,7 @@ export function cardCalendar(config: Config, card: CardConfig, events: EventReco
 
   let previous: number | null = null
   return {
-    card: { id: card.id, name: card.tag, emoji: card.emoji, decimals: judged ? measuredDecimals(config, card) : unit ? decimals : null },
+    card: { id: card.id, name: card.name, emoji: card.emoji, decimals: judged ? measuredDecimals(config, card) : unit ? decimals : null },
     days: dates.map((date, i): CalendarDay => {
       const list = byDate.get(date) ?? []
       let value: FactValue | null = strip ? strip.values[i]! : list.length || null

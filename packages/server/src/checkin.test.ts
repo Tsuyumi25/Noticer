@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { createApp } from './app.ts'
 import { emptyConfig, memoryStore } from './config.ts'
 import { openDb, type DB } from './db.ts'
@@ -9,10 +10,10 @@ const unjudged = { find: { match: 'all', blocks: [] }, now: {}, back: null } as 
 const config = {
   ...emptyConfig,
   cards: [
-    { id: 'skincare', tag: '護膚', emoji: '🧴', rules: unjudged },
-    { id: 'sunscreen', tag: '防曬', bucket: '護膚', emoji: '🌞', rules: unjudged, hiddenTags: ['化妝水'] },
-    { id: 'weight', tag: '體重', emoji: '⚖️', rules: unjudged },
-    { id: 'practice', tag: '練習', emoji: '🎹', rules: unjudged, facts: ['mood_emoji'] },
+    { id: 'skincare', name: '護膚', root: '護膚', emoji: '🧴', rules: unjudged },
+    { id: 'sunscreen', name: '防曬', root: '護膚', emoji: '🌞', rules: unjudged, defaultTags: ['防曬'], hiddenTags: ['化妝水'] },
+    { id: 'weight', name: '體重', root: '體重', emoji: '⚖️', rules: unjudged },
+    { id: 'practice', name: '練習', root: '練習', emoji: '🎹', rules: unjudged, facts: ['mood_emoji'] },
   ],
   tagGroups: {
     護膚: { emoji: '🧴', groups: [{ name: '保養項目', color: '#3b82f6', tags: [{ label: '化妝水', emoji: '🧴' }, { label: '防曬', emoji: '🌞' }] }] },
@@ -39,10 +40,10 @@ function setup() {
 const allEvents = (db: DB) => listEvents(db, 0, Number.MAX_SAFE_INTEGER)
 
 describe('checkin', () => {
-  it('saves the picked tags plus the card tag and bucket, once each', async () => {
+  it("saves the card's root plus the picked tags, once each, leaving out a default taken off", async () => {
     const { db, send } = setup()
     await send('POST', '/api/checkin', { cardId: 'sunscreen', note: '  早上 ', tags: ['乳液', '護膚', ' '] })
-    expect(allEvents(db)[0]).toMatchObject({ cardId: 'sunscreen', tags: ['防曬', '護膚', '乳液'], note: '早上', timeOffset: 0 })
+    expect(allEvents(db)[0]).toMatchObject({ cardId: 'sunscreen', tags: ['護膚', '乳液'], note: '早上', timeOffset: 0 })
   })
 
   it('backdates event_at by the offset and refuses times in the future', async () => {
@@ -68,6 +69,42 @@ describe('checkin', () => {
     expect((await send('POST', '/api/checkin', { cardId: 'nope', note: '', tags: [] })).status).toBe(404)
     expect((await send('POST', '/api/checkin', { cardId: 'practice', note: '', tags: [] })).status).toBe(422)
     expect(allEvents(db)).toEqual([])
+  })
+})
+
+describe('new cards', () => {
+  const createdId = async (res: Response) => z.object({ id: z.string() }).parse(await res.json()).id
+
+  it('lock in the chosen root and start with the other tags picked, judging nothing yet', async () => {
+    const { db, store, send } = setup()
+    const res = await send('POST', '/api/cards', { name: '陶藝', emoji: '🏺', root: '陶藝', defaultTags: ['陶藝', ' 拉坯', '拉坯', ''] })
+    expect(res.status).toBe(201)
+    const id = await createdId(res)
+    expect(store.read().cards.at(-1)).toEqual({ id, name: '陶藝', emoji: '🏺', root: '陶藝', defaultTags: ['拉坯'], rules: unjudged })
+    await send('POST', '/api/checkin', { cardId: id, note: '', tags: [] })
+    expect(allEvents(db)[0]).toMatchObject({ cardId: id, tags: ['陶藝'] })
+  })
+
+  it("copy a card with the same root: its hidden tags, choices and rules come along, and a root's list stays shared", async () => {
+    const { store, send } = setup()
+    const judged = { ...unjudged, now: { late: { warn: 3600, danger: 7200 } } }
+    await send('PUT', '/api/cards/practice/rules', judged)
+    const id = await createdId(await send('POST', '/api/cards', { name: '練吉他', emoji: '🎸', root: '練習', defaultTags: ['吉他'], copyOf: 'practice' }))
+    expect(store.read().cards.find((k) => k.id === id)).toMatchObject({ facts: ['mood_emoji'], rules: judged, defaultTags: ['吉他'] })
+    const nightId = await createdId(await send('POST', '/api/cards', { name: '晚上防曬', emoji: '🌙', root: '護膚', defaultTags: [], copyOf: 'sunscreen' }))
+    const night = store.read().cards.find((k) => k.id === nightId)
+    expect(night).toMatchObject({ hiddenTags: ['化妝水'] })
+    expect(night).not.toHaveProperty('defaultTags')
+    expect(store.read().tagGroups['護膚']?.groups).toHaveLength(1)
+  })
+
+  it('refuse a copy under another root, an unknown card to copy, and a blank name or root', async () => {
+    const { store, send } = setup()
+    expect((await send('POST', '/api/cards', { name: 'x', emoji: '🙂', root: '體重', defaultTags: [], copyOf: 'practice' })).status).toBe(400)
+    expect((await send('POST', '/api/cards', { name: 'x', emoji: '🙂', root: '體重', defaultTags: [], copyOf: 'nope' })).status).toBe(404)
+    expect((await send('POST', '/api/cards', { name: ' ', emoji: '🙂', root: '體重', defaultTags: [] })).status).toBe(400)
+    expect((await send('POST', '/api/cards', { name: 'x', emoji: '🙂', root: '', defaultTags: [] })).status).toBe(400)
+    expect(store.read().cards).toHaveLength(4)
   })
 })
 
@@ -142,7 +179,7 @@ describe('quick notes', () => {
   })
 
   it('refuse a config that gives a card the reserved id', () => {
-    expect(() => memoryStore({ ...config, cards: [...config.cards, { id: 'pure', tag: '隨手記', emoji: '📝', rules: unjudged }] }).read()).toThrow(/kept for quick notes/)
+    expect(() => memoryStore({ ...config, cards: [...config.cards, { id: 'pure', name: '隨手記', root: '隨手記', emoji: '📝', rules: unjudged }] }).read()).toThrow(/kept for quick notes/)
   })
 })
 
@@ -192,9 +229,9 @@ describe('values', () => {
   })
 
   it('refuses a config whose card names an undefined fact or measures a unit no tag carries', () => {
-    expect(() => memoryStore({ ...config, cards: [{ id: 'x', tag: 'x', emoji: 'x', rules: unjudged, facts: ['nope'] }] }).read()).toThrow(/unknown fact nope/)
+    expect(() => memoryStore({ ...config, cards: [{ id: 'x', name: 'x', root: 'x', emoji: 'x', rules: unjudged, facts: ['nope'] }] }).read()).toThrow(/unknown fact nope/)
     const measuring = { ...unjudged, back: { span: 'day', measure: { kind: 'total', unit: '首' }, want: { kind: 'atLeast', n: 1 } } }
-    expect(() => memoryStore({ ...config, cards: [{ id: 'x', tag: '練習', emoji: 'x', rules: measuring }] }).read()).toThrow(/measures 首/)
+    expect(() => memoryStore({ ...config, cards: [{ id: 'x', name: 'x', root: '練習', emoji: 'x', rules: measuring }] }).read()).toThrow(/measures 首/)
   })
 })
 
@@ -204,7 +241,7 @@ describe('card tags', () => {
     await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: ['乳液', '面膜'] })
     await send('POST', '/api/checkin', { cardId: 'sunscreen', note: '', tags: ['乳液', '化妝水'] })
     const tags = (await (await send('GET', '/api/cards/sunscreen/tags')).json()) as CardTags
-    expect(tags).toMatchObject({ root: '護膚', auto: ['防曬', '護膚'], hidden: ['化妝水'], defaults: [], ungrouped: ['乳液', '面膜'] })
+    expect(tags).toMatchObject({ root: '護膚', hidden: ['化妝水'], defaults: ['防曬'], ungrouped: ['乳液', '面膜'] })
     expect(tags.groups[0]?.name).toBe('保養項目')
   })
 
@@ -236,8 +273,7 @@ describe('card tags', () => {
     await send('PUT', '/api/cards/skincare/tag-settings', { hiddenTags: ['防曬'], defaultTags: ['化妝水'] })
     const [skincare, sunscreen] = store.read().cards
     expect(skincare).toMatchObject({ hiddenTags: ['防曬'], defaultTags: ['化妝水'] })
-    expect(sunscreen).toMatchObject({ hiddenTags: ['化妝水'] })
-    expect(sunscreen?.defaultTags).toBeUndefined()
+    expect(sunscreen).toMatchObject({ hiddenTags: ['化妝水'], defaultTags: ['防曬'] })
   })
 })
 
