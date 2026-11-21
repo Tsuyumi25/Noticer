@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
+import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { computed, nextTick, ref, watch } from 'vue'
 import { api } from '../../api.ts'
 import { locale, t } from '../../i18n/index.ts'
@@ -121,9 +122,63 @@ const nextSleep = computed(() => {
   if (a.predictedSleepAt !== null) return clock(a.predictedSleepAt * 1000)
   return a.phase.currentOnsetHour === null ? null : hhmm(a.phase.currentOnsetHour)
 })
-const normal = computed(() => summary.value?.forecast.find((w) => w.isCurrent || w.daysUntil !== null) ?? null)
-const day = (iso: string) => shortDate(new Date(`${iso}T00:00`).getTime())
+const localDate = (iso: string) => new Date(`${iso}T00:00`)
+const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+
+/** Each window as its first and last night; `days` counts them, so a window still open at the horizon keeps its end. */
+const windows = computed(() =>
+  (summary.value?.forecast ?? []).map((w) => {
+    const first = localDate(w.start)
+    return { ...w, first, last: addDays(first, w.days - 1) }
+  }),
+)
+const upcoming = computed(() => windows.value.find((w) => w.isCurrent || w.daysUntil !== null) ?? null)
 const when = (w: { isCurrent: boolean; daysUntil: number | null }) => (w.isCurrent ? t('sleep.current') : t('sleep.daysLater', { n: w.daysUntil ?? 0 }))
+
+// 2023-01-01 was a Sunday, matching the month report beside this tab.
+const weekdays = computed(() =>
+  Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(locale.value, { weekday: 'narrow' }).format(new Date(2023, 0, 1 + i))),
+)
+
+/** From this month through the last forecast night, each day marked by whether it falls inside a window. */
+const forecastMonths = computed(() => {
+  const today = new Date(startOfLocalDay(Date.now() / 1000))
+  const last = windows.value.reduce((latest, w) => (w.last > latest ? w.last : latest), today)
+  const nightOf = new Map<number, { first: boolean; last: boolean }>()
+  for (const w of windows.value) {
+    for (let d = w.first; d <= w.last; d = addDays(d, 1)) {
+      nightOf.set(d.getTime(), { first: d.getTime() === w.first.getTime(), last: d.getTime() === w.last.getTime() })
+    }
+  }
+  const format = new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: 'long' })
+  const months = []
+  for (let m = new Date(today.getFullYear(), today.getMonth(), 1); m <= last; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+    const length = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate()
+    const days = Array.from({ length }, (_, i) => {
+      const date = new Date(m.getFullYear(), m.getMonth(), i + 1)
+      const night = nightOf.get(date.getTime())
+      const weekday = date.getDay()
+      return {
+        n: i + 1,
+        past: date < today,
+        today: date.getTime() === today.getTime(),
+        night: !!night,
+        roundStart: !!night && (night.first || weekday === 0),
+        roundEnd: !!night && (night.last || weekday === 6),
+      }
+    })
+    months.push({ key: m.getTime(), label: format.format(m), lead: m.getDay(), days })
+  }
+  return months
+})
+
+const monthPager = ref<HTMLElement | null>(null)
+const monthIndex = ref(0)
+const onMonthScroll = () => {
+  const el = monthPager.value
+  if (el) monthIndex.value = Math.round(el.scrollLeft / el.clientWidth)
+}
+const showMonth = (i: number) => monthPager.value?.scrollTo({ left: i * monthPager.value.clientWidth, behavior: 'smooth' })
 const nightLabel = computed(() => {
   const n = data.value?.normalNight
   return n ? t('sleep.normalDays', { from: `${pad(n.from)}:00`, to: `${pad(n.to)}:00` }) : ''
@@ -181,21 +236,45 @@ const nightLabel = computed(() => {
       <div v-if="nextSleep" class="stat wide">
         <span class="label">{{ t('sleep.next') }}</span><b>{{ nextSleep }}</b>
       </div>
-      <div v-if="normal" class="stat wide">
-        <span class="label">{{ t('sleep.backToNormal') }}</span>
-        <b>{{ day(normal.start) }}–{{ day(normal.end) }}<small>{{ when(normal) }}</small></b>
-      </div>
     </div>
 
-    <section v-if="summary?.forecast.length">
-      <h3 class="mb-2 px-1 text-sm font-semibold text-zinc-700">{{ nightLabel }}</h3>
-      <ul class="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
-        <li v-for="w in summary.forecast" :key="w.start" class="flex min-h-11 items-center gap-2 px-3 text-sm">
-          <span class="flex-1 tabular-nums">{{ day(w.start) }} – {{ day(w.end) }}</span>
-          <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">{{ w.days }}{{ t('unit.day') }}</span>
-          <span class="w-16 text-right text-zinc-500">{{ when(w) }}</span>
-        </li>
-      </ul>
+    <section v-if="windows.length" class="rounded-xl border border-zinc-200 bg-white px-2 pt-3 pb-2">
+      <header class="mb-2 flex items-baseline justify-between gap-2 px-1">
+        <h3 class="text-sm font-semibold text-zinc-700">{{ nightLabel }}</h3>
+        <span v-if="upcoming" class="text-sm whitespace-nowrap text-emerald-700 tabular-nums">
+          {{ shortDate(upcoming.first.getTime()) }}–{{ shortDate(upcoming.last.getTime()) }} · {{ when(upcoming) }}
+        </span>
+      </header>
+      <div class="flex items-center justify-between">
+        <button class="month-nav" :aria-label="t('journal.prevMonth')" :disabled="monthIndex === 0" @click="showMonth(monthIndex - 1)">
+          <ChevronLeft :size="20" />
+        </button>
+        <h4 class="text-sm font-semibold text-zinc-600">{{ forecastMonths[monthIndex]?.label }}</h4>
+        <button
+          class="month-nav"
+          :aria-label="t('journal.nextMonth')"
+          :disabled="monthIndex >= forecastMonths.length - 1"
+          @click="showMonth(monthIndex + 1)"
+        >
+          <ChevronRight :size="20" />
+        </button>
+      </div>
+      <div class="grid grid-cols-7 text-center text-[11px] text-zinc-400">
+        <span v-for="(w, i) in weekdays" :key="i">{{ w }}</span>
+      </div>
+      <div ref="monthPager" data-hscroll class="month-pager" @scroll.passive="onMonthScroll">
+        <div v-for="month in forecastMonths" :key="month.key" class="month grid grid-cols-7 content-start gap-y-1">
+          <span v-for="n in month.lead" :key="`lead-${n}`" />
+          <span
+            v-for="d in month.days"
+            :key="d.n"
+            class="night-cell"
+            :class="{ past: d.past, night: d.night, 'round-start': d.roundStart, 'round-end': d.roundEnd, today: d.today }"
+          >
+            {{ d.n }}
+          </span>
+        </div>
+      </div>
     </section>
   </div>
 </template>
@@ -247,6 +326,56 @@ const nightLabel = computed(() => {
   color: #18181b;
   font-weight: 600;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+}
+.month-pager {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.month {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+}
+.month-nav {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: #71717a;
+}
+.month-nav:disabled {
+  opacity: 0.25;
+}
+.night-cell {
+  display: flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  color: #3f3f46;
+  font: 500 13px ui-monospace, 'SF Mono', Menlo, monospace;
+}
+.night-cell.past {
+  color: #a1a1aa;
+}
+.night-cell.night {
+  background: #bbf7d0;
+  color: #065f46;
+}
+.night-cell.round-start {
+  border-top-left-radius: 10px;
+  border-bottom-left-radius: 10px;
+}
+.night-cell.round-end {
+  border-top-right-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+.night-cell.today {
+  box-shadow: inset 0 0 0 2px #4f46e5;
+  border-radius: 10px;
 }
 .swatch {
   display: inline-block;

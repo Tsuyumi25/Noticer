@@ -43,7 +43,6 @@ export default {
   'sleep.rotation': '一周',
   'sleep.regularity': '規則性 R',
   'sleep.next': '次に眠くなる',
-  'sleep.backToNormal': '通常の時間帯に戻る',
   'sleep.normalDays': '{from}–{to} に戻る日',
   'sleep.current': '今',
   'sleep.daysLater': '{n} 日後',

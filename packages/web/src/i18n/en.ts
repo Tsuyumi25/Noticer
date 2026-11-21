@@ -43,7 +43,6 @@ export default {
   'sleep.rotation': 'Full cycle',
   'sleep.regularity': 'Regularity R',
   'sleep.next': 'Sleepy at',
-  'sleep.backToNormal': 'Back to normal',
   'sleep.normalDays': 'Days back in {from}–{to}',
   'sleep.current': 'Now',
   'sleep.daysLater': 'in {n} d',

@@ -42,7 +42,6 @@ export default {
   'sleep.rotation': '轉一圈',
   'sleep.regularity': '規律度 R',
   'sleep.next': '下次想睡',
-  'sleep.backToNormal': '回到正常時段',
   'sleep.normalDays': '回到 {from}–{to} 的日子',
   'sleep.current': '現在',
   'sleep.daysLater': '{n} 天後',
