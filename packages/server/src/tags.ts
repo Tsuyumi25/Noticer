@@ -6,22 +6,15 @@ export function cardRoot(card: Pick<CardConfig, 'tag' | 'bucket'>): string {
   return card.bucket ?? card.tag
 }
 
-export interface CardTags {
-  root: string
-  /** Attached on submit without being picked: the card's tag and its bucket. */
-  auto: string[]
+/** A tag's option list: the groups pinned on it and every other tag that has appeared with it, most used first. */
+export interface RootTags {
   groups: TagGroup[]
-  hidden: string[]
-  defaults: string[]
-  /** Tags used alongside the root before but not placed in any group, most used first. */
   ungrouped: string[]
 }
 
-export function cardTags(db: DB, config: Config, card: CardConfig): CardTags {
-  const root = cardRoot(card)
+export function rootTags(db: DB, config: Config, root: string, exclude: string[] = []): RootTags {
   const groups = config.tagGroups[root]?.groups ?? []
-  const auto = [...new Set([card.tag, ...(card.bucket ? [card.bucket] : [])])]
-  const known = new Set([root, ...auto, ...groups.flatMap((g) => g.tags.map((t) => t.label))])
+  const known = new Set([root, ...exclude, ...groups.flatMap((g) => g.tags.map((t) => t.label))])
   const used = db
     .prepare<[string], { name: string }>(
       `SELECT t.name FROM checkin_tags ct JOIN tags_dict t ON t.id = ct.tag_id
@@ -31,12 +24,29 @@ export function cardTags(db: DB, config: Config, card: CardConfig): CardTags {
        GROUP BY t.name ORDER BY COUNT(*) DESC, t.name`,
     )
     .all(root)
-  return {
-    root,
-    auto,
-    groups,
-    hidden: card.hiddenTags ?? [],
-    defaults: card.defaultTags ?? [],
-    ungrouped: used.map((r) => r.name).filter((name) => !known.has(name)),
-  }
+  return { groups, ungrouped: used.map((r) => r.name).filter((name) => !known.has(name)) }
+}
+
+/** Every tag ever recorded, most used first. */
+export function allTags(db: DB): string[] {
+  return db
+    .prepare<[], { name: string }>(
+      `SELECT t.name FROM tags_dict t JOIN checkin_tags ct ON ct.tag_id = t.id GROUP BY t.id ORDER BY COUNT(*) DESC, t.name`,
+    )
+    .all()
+    .map((r) => r.name)
+}
+
+export interface CardTags extends RootTags {
+  root: string
+  /** Attached on submit without being picked: the card's tag and its bucket. */
+  auto: string[]
+  hidden: string[]
+  defaults: string[]
+}
+
+export function cardTags(db: DB, config: Config, card: CardConfig): CardTags {
+  const root = cardRoot(card)
+  const auto = [...new Set([card.tag, ...(card.bucket ? [card.bucket] : [])])]
+  return { root, auto, ...rootTags(db, config, root, auto), hidden: card.hiddenTags ?? [], defaults: card.defaultTags ?? [] }
 }

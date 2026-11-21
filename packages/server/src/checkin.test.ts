@@ -114,6 +114,38 @@ describe('editing an event', () => {
   })
 })
 
+describe('quick notes', () => {
+  it('write only the tags picked, under the reserved id, and take no values', async () => {
+    const { db, send } = setup()
+    expect((await send('POST', '/api/checkin', { cardId: 'pure', note: ' 試了陶藝 ', tags: [' 陶藝', '護膚', '陶藝', ''] })).status).toBe(201)
+    expect((await send('POST', '/api/checkin', { cardId: 'pure', note: '', tags: ['體重'], facts: { '體重:kg': 50 } })).status).toBe(400)
+    expect(allEvents(db)).toEqual([expect.objectContaining({ cardId: 'pure', tags: ['陶藝', '護膚'], note: '試了陶藝', facts: {} })])
+  })
+
+  it('stay quick notes when edited, gaining no card tag', async () => {
+    const { db, send } = setup()
+    await send('POST', '/api/checkin', { cardId: 'pure', note: '', tags: ['陶藝'] })
+    const [event] = allEvents(db)
+    expect((await send('PUT', `/api/events/${event!.id}`, { note: '', tags: ['陶藝', '拉坯'], eventAt: event!.eventAt })).status).toBe(204)
+    expect(allEvents(db)[0]).toMatchObject({ cardId: 'pure', tags: ['陶藝', '拉坯'] })
+  })
+
+  it('offer every root to start from, and a root its pinned groups and the tags seen with it', async () => {
+    const { send } = setup()
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: ['乳液'] })
+    await send('POST', '/api/checkin', { cardId: 'pure', note: '', tags: ['陶藝'] })
+    const pure = await (await send('GET', '/api/pure')).json()
+    expect(pure.roots.map((r: { tag: string }) => r.tag)).toEqual(['護膚', '體重', '練習'])
+    expect(pure.tags).toEqual(expect.arrayContaining(['護膚', '乳液', '陶藝']))
+    const root = await (await send('GET', `/api/roots/${encodeURIComponent('護膚')}/tags`)).json()
+    expect(root).toMatchObject({ groups: [{ name: '保養項目' }], ungrouped: ['乳液'] })
+  })
+
+  it('refuse a config that gives a card the reserved id', () => {
+    expect(() => memoryStore({ ...config, cards: [...config.cards, { id: 'pure', tag: '隨手記', emoji: '📝', rules: unjudged }] }).read()).toThrow(/kept for quick notes/)
+  })
+})
+
 describe('values', () => {
   const post = (send: ReturnType<typeof setup>['send'], cardId: string, tags: string[], facts: Record<string, unknown>) =>
     send('POST', '/api/checkin', { cardId, note: '', tags, facts })

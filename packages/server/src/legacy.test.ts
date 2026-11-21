@@ -14,6 +14,7 @@ const legacy = {
     { id: 'ironing', tag: '燙衣', emoji: '👕', trackerId: 'ironing' },
     { id: 'sweet_coffee', tag: '加糖', bucket: '喝咖啡', emoji: '🍬', trackerId: 'sweet_coffee' },
     { id: 'weight', tag: '體重', emoji: '⚖️', trackerId: null, facts: ['weight_kg'] },
+    { id: 'pure', tag: '隨手記', emoji: '📝', trackerId: null },
   ],
   trackersStatus: [
     { id: 'coffee', type: 'cooldown', source: { tag: '喝咖啡' }, stages: [{ atLeast: ms(3 * 3600), status: 'pending' }, { atLeast: ms(4 * 3600), status: 'good' }] },
@@ -43,8 +44,9 @@ describe('convertLegacyConfig', () => {
   const converted = convertLegacyValues(convertLegacyConfig(legacy), []).config
   const rules = (id: string) => configSchema.parse(converted).cards.find((c) => c.id === id)!.rules
 
-  it('produces a valid config without trackers and keeps fields it does not model', () => {
+  it('produces a valid config without trackers or the old quick-note card, and keeps fields it does not model', () => {
     expect(converted).not.toHaveProperty('trackersStatus')
+    expect(converted.cards.map((c) => c.id)).not.toContain('pure')
     expect(converted.cards[0]).toMatchObject({ memo: 'kept' })
     expect(converted.cards[0]).not.toHaveProperty('trackerId')
   })

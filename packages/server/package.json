@@ -7,6 +7,7 @@
     "./config": "./src/config.ts",
     "./dashboard": "./src/dashboard.ts",
     "./facts": "./src/facts.ts",
+    "./pure": "./src/pure.ts",
     "./review": "./src/review.ts",
     "./rules": "./src/rules.ts",
     "./tags": "./src/tags.ts",

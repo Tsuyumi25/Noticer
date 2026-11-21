@@ -3,6 +3,7 @@ export default {
   'nav.home': '首頁',
   'nav.journal': '日誌',
   'nav.settings': '設定',
+  'nav.quickNote': '隨手記',
 
   'common.loading': '載入中…',
   'common.loadFailed': '讀取失敗',
@@ -78,6 +79,7 @@ export default {
 
   'tags.ungrouped': '未分組',
   'tags.custom': '+ 自訂',
+  'quickNote.newTag': '新的 tag',
   'tags.moveUp': '往上移',
   'tags.moveDown': '往下移',
   'tags.auto': '卡片自動帶入',

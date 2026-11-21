@@ -4,6 +4,7 @@ export default {
   'nav.home': 'Home',
   'nav.journal': 'Journal',
   'nav.settings': 'Settings',
+  'nav.quickNote': 'Note',
 
   'common.loading': 'Loading…',
   'common.loadFailed': "Couldn't load",
@@ -79,6 +80,7 @@ export default {
 
   'tags.ungrouped': 'Ungrouped',
   'tags.custom': '+ Custom',
+  'quickNote.newTag': 'New tag',
   'tags.moveUp': 'Move up',
   'tags.moveDown': 'Move down',
   'tags.auto': 'Added by the card',

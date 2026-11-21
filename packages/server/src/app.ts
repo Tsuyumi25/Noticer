@@ -1,16 +1,17 @@
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { checkinTags, createCheckin, deleteCheckin, findEvent, updateCheckin } from './checkin.ts'
-import { rootUnits, rulesSchema, tagGroupsSchema, valueSpecSchema, type ConfigStore } from './config.ts'
+import { checkinTags, createCheckin, deleteCheckin, findEvent, pickedTags, updateCheckin } from './checkin.ts'
+import { rootUnits, rulesSchema, tagGroupsSchema, valueSpecSchema, type Config, type ConfigStore } from './config.ts'
+import { PURE_CARD } from './pure.ts'
 import { buildDashboard } from './dashboard.ts'
 import type { DB } from './db.ts'
 import { listEvents } from './events.ts'
-import { cardInputs, readFacts } from './facts.ts'
+import { cardInputs, readFacts, type FactRow } from './facts.ts'
 import { cardCalendar, reportCounts } from './review.ts'
 import { analyzeSleep } from './sleep-analysis.ts'
 import { blocksOf, sleepEvents, SLEEP_CARD, WAKE_CARD } from './sleep.ts'
-import { cardRoot, cardTags } from './tags.ts'
+import { allTags, cardRoot, cardTags, rootTags } from './tags.ts'
 
 type Env = { Variables: { db: DB; store: ConfigStore } }
 
@@ -53,6 +54,22 @@ const tagValuesBody = z.object({ values: z.record(z.string(), valueSpecSchema) }
 
 const tagSettingsBody = z.object({ hiddenTags: z.array(z.string()), defaultTags: z.array(z.string()) })
 
+type Write = { ok: true; tags: string[]; rows: FactRow[]; choiceKeys: string[] } | { ok: false; status: 400 | 404 | 422; error: string }
+
+/** What a checkin through this card writes; a quick note writes only the tags picked and takes no values. */
+function resolveWrite(config: Config, cardId: string, tags: string[], facts: Record<string, number | string>): Write {
+  if (cardId === PURE_CARD) {
+    if (Object.keys(facts).length > 0) return { ok: false, status: 400, error: 'a quick note takes no values' }
+    return { ok: true, tags: pickedTags(tags), rows: [], choiceKeys: [] }
+  }
+  const card = config.cards.find((k) => k.id === cardId)
+  if (!card) return { ok: false, status: 404, error: `unknown card ${cardId}` }
+  const written = checkinTags(card, tags)
+  const read = readFacts(config, card, facts, written)
+  if (!read.ok) return read
+  return { ok: true, tags: written, rows: read.rows, choiceKeys: card.facts ?? [] }
+}
+
 const api = new Hono<Env>()
   .basePath('/api')
   .get('/events', zValidator('query', rangeQuery), (c) => {
@@ -71,14 +88,11 @@ const api = new Hono<Env>()
   })
   .post('/checkin', zValidator('json', checkinBody), (c) => {
     const { cardId, note, tags, timeOffset = 0, facts = {} } = c.req.valid('json')
-    const config = c.var.store.read()
-    const card = config.cards.find((k) => k.id === cardId)
-    if (!card) return c.json({ error: `unknown card ${cardId}` }, 404)
-    const read = readFacts(config, card, facts, checkinTags(card, tags))
-    if (!read.ok) return c.json({ error: read.error }, read.status)
+    const write = resolveWrite(c.var.store.read(), cardId, tags, facts)
+    if (!write.ok) return c.json({ error: write.error }, write.status)
     const trimmed = note.trim()
     const now = Math.floor(Date.now() / 1000)
-    const id = createCheckin(c.var.db, card, { note: trimmed === '' ? null : trimmed, picked: tags, facts: read.rows, now, timeOffset })
+    const id = createCheckin(c.var.db, cardId, { note: trimmed === '' ? null : trimmed, tags: write.tags, facts: write.rows, now, timeOffset })
     return c.json({ id }, 201)
   })
   .put('/events/:id', zValidator('param', eventParam), zValidator('json', eventBody), (c) => {
@@ -86,20 +100,28 @@ const api = new Hono<Env>()
     const { note, tags, eventAt, facts = {} } = c.req.valid('json')
     const stored = findEvent(c.var.db, id)
     if (!stored) return c.json({ error: `unknown event ${id}` }, 404)
-    const config = c.var.store.read()
-    const card = config.cards.find((k) => k.id === stored.cardId)
-    if (!card) return c.json({ error: `unknown card ${stored.cardId}` }, 404)
     if (eventAt > Math.floor(Date.now() / 1000)) return c.json({ error: 'eventAt is in the future' }, 400)
-    const read = readFacts(config, card, facts, checkinTags(card, tags))
-    if (!read.ok) return c.json({ error: read.error }, read.status)
+    const write = resolveWrite(c.var.store.read(), stored.cardId, tags, facts)
+    if (!write.ok) return c.json({ error: write.error }, write.status)
     const trimmed = note.trim()
-    updateCheckin(c.var.db, id, card, { note: trimmed === '' ? null : trimmed, picked: tags, facts: read.rows, timeOffset: eventAt - stored.createdAt })
+    updateCheckin(c.var.db, id, write.choiceKeys, {
+      note: trimmed === '' ? null : trimmed,
+      tags: write.tags,
+      facts: write.rows,
+      timeOffset: eventAt - stored.createdAt,
+    })
     return c.body(null, 204)
   })
   .delete('/events/:id', zValidator('param', eventParam), (c) => {
     if (!deleteCheckin(c.var.db, c.req.valid('param').id)) return c.json({ error: 'unknown event' }, 404)
     return c.body(null, 204)
   })
+  .get('/pure', (c) => {
+    const config = c.var.store.read()
+    const roots = [...new Map(config.cards.map((k) => [cardRoot(k), config.tagGroups[cardRoot(k)]?.emoji || k.emoji])).entries()]
+    return c.json({ roots: roots.map(([tag, emoji]) => ({ tag, emoji })), tags: allTags(c.var.db) })
+  })
+  .get('/roots/:tag/tags', (c) => c.json(rootTags(c.var.db, c.var.store.read(), c.req.param('tag'))))
   .get('/config', (c) => c.json(c.var.store.read()))
   .get('/cards/:cardId/tags', (c) => {
     const config = c.var.store.read()

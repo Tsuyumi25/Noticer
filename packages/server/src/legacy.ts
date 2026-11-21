@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { BackupRecord } from './backup.ts'
 import type { BackRule, Filter, Find, NowRule, RawConfig, Rules, ValueSpec, Want } from './config.ts'
+import { PURE_CARD } from './pure.ts'
 import { durationBefore } from './rules.ts'
 import { valueKey } from './values.ts'
 
@@ -124,7 +125,10 @@ function toBack(tracker: PeriodicTracker, where: string): Omit<BackRule, 'find'>
   }
 }
 
-/** Turns the old app's config into this app's: each card carries its own rules; trackers no card uses are dropped. */
+/**
+ * Turns the old app's config into this app's: each card carries its own rules; trackers no card uses are dropped, and
+ * so is the old quick-note card, since quick notes are no card here.
+ */
 export function convertLegacyConfig(raw: unknown): RawConfig {
   const { cards, trackersStatus, trackersPeriodic, ...rest } = raw as Record<string, unknown>
   const legacy = legacySchema.parse({ cards, trackersStatus, trackersPeriodic })
@@ -132,7 +136,7 @@ export function convertLegacyConfig(raw: unknown): RawConfig {
   const periodic = new Map(legacy.trackersPeriodic.map((t) => [t.id, t]))
   return {
     ...rest,
-    cards: legacy.cards.map(({ trackerId, ...card }) => {
+    cards: legacy.cards.filter((card) => card.id !== PURE_CARD).map(({ trackerId, ...card }) => {
       const root = card.bucket ?? card.tag
       const nowTracker = trackerId ? status.get(trackerId) : undefined
       const backTracker = periodic.get(card.id)

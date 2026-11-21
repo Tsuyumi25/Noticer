@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { z } from 'zod'
+import { PURE_CARD } from './pure.ts'
 
 const statusSchema = z.enum(['good', 'pending', 'warning', 'danger'])
 
@@ -126,6 +127,7 @@ export const configSchema = z
   })
   .superRefine((config, ctx) => {
     for (const card of config.cards) {
+      if (card.id === PURE_CARD) ctx.addIssue({ code: 'custom', message: `card id ${PURE_CARD} is kept for quick notes` })
       for (const key of card.facts ?? []) {
         if (!(key in config.factInputs)) ctx.addIssue({ code: 'custom', message: `card ${card.id} uses unknown fact ${key}` })
       }

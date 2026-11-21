@@ -4,6 +4,7 @@ export default {
   'nav.home': 'ホーム',
   'nav.journal': '日誌',
   'nav.settings': '設定',
+  'nav.quickNote': 'メモ',
 
   'common.loading': '読み込み中…',
   'common.loadFailed': '読み込めませんでした',
@@ -79,6 +80,7 @@ export default {
 
   'tags.ungrouped': '未分類',
   'tags.custom': '+ 追加',
+  'quickNote.newTag': '新しいタグ',
   'tags.moveUp': '上へ移動',
   'tags.moveDown': '下へ移動',
   'tags.auto': 'カードが付けるタグ',

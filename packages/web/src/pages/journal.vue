@@ -2,11 +2,13 @@
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import type { CardConfig } from 'server/config'
+import { PURE_CARD } from 'server/pure'
 import { parseValueKey } from 'server/values'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.ts'
 import CheckinSheet, { type SheetEvent } from '../components/CheckinSheet.vue'
+import QuickNoteSheet from '../components/QuickNoteSheet.vue'
 import JournalCalendar from '../components/JournalCalendar.vue'
 import { useDaySwipe } from '../daySwipe.ts'
 import { t, tn } from '../i18n/index.ts'
@@ -98,6 +100,7 @@ function chipsOf(card: CardConfig | undefined, facts: Record<string, string | nu
 const rows = computed(() =>
   (events.value ?? []).map((event, i, all) => {
     const card = cards.value.get(event.cardId)
+    const quick = event.cardId === PURE_CARD
     const own = new Set([card?.tag, card?.bucket])
     const tags = event.tags.filter((tag) => !own.has(tag)).map((label) => ({ label, color: colors.value.get(label) }))
     const previous = all[i - 1]
@@ -105,6 +108,7 @@ const rows = computed(() =>
     return {
       event,
       card,
+      quick,
       tags,
       chips: chipsOf(card, event.facts),
       color: tags.find((tag) => tag.color)?.color ?? (card && config.value ? cardColor(config.value, card) : '#d4d4d8'),
@@ -114,8 +118,10 @@ const rows = computed(() =>
 )
 
 const editing = ref<{ card: CardConfig; event: SheetEvent } | null>(null)
+const editingNote = ref<SheetEvent | null>(null)
 function edit(row: (typeof rows.value)[number]) {
-  if (row.card) editing.value = { card: row.card, event: row.event }
+  if (row.quick) editingNote.value = row.event
+  else if (row.card) editing.value = { card: row.card, event: row.event }
 }
 
 const calendar = ref(false)
@@ -148,7 +154,7 @@ function pickDay(key: string) {
             </div>
             <div class="rail">
               <span class="line" />
-              <span class="node">{{ row.card?.emoji ?? '•' }}</span>
+              <span class="node">{{ row.quick ? '📝' : (row.card?.emoji ?? '•') }}</span>
             </div>
             <div class="body">
               <div v-if="row.tags.length || row.chips.length" class="flex flex-wrap gap-1">
@@ -182,6 +188,7 @@ function pickDay(key: string) {
       :event="editing.event"
       @close="editing = null"
     />
+    <QuickNoteSheet v-if="editingNote" :key="editingNote.id" :event="editingNote" @close="editingNote = null" />
   </main>
 </template>
 
