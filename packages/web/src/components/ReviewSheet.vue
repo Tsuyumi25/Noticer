@@ -2,7 +2,7 @@
 import { useQuery } from '@tanstack/vue-query'
 import { ChevronDown, Settings } from 'lucide-vue-next'
 import type { CalendarDay } from 'server/review'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
@@ -45,7 +45,7 @@ interface Month {
   days: (CalendarDay & { day: number })[]
 }
 
-/** Newest month first: scrolling down goes back in time. */
+/** Oldest month first, like a photo library: scrolling up goes back in time. */
 const months = computed<Month[]>(() => {
   const byMonth = new Map<string, Month>()
   const format = new Intl.DateTimeFormat(locale.value, { year: 'numeric', month: 'long' })
@@ -59,7 +59,7 @@ const months = computed<Month[]>(() => {
     }
     month.days.push({ ...d, day: Number(d.date.slice(8)) })
   }
-  return [...byMonth.values()].reverse()
+  return [...byMonth.values()]
 })
 
 function show(value: CalendarDay['value']): string {
@@ -75,6 +75,21 @@ const selected = ref<string | null>(null)
 const editingRules = ref(false)
 const picked = ref<'analysis' | 'calendar' | null>(null)
 const tab = computed(() => picked.value ?? (props.sleep ? 'analysis' : 'calendar'))
+
+// The months open at the bottom, on this month, each time the tab is shown; later refetches leave the scroll alone.
+const scroller = ref<HTMLElement | null>(null)
+let anchored = false
+watch(
+  [tab, () => months.value.length],
+  async ([current, count]) => {
+    if (current !== 'calendar') return void (anchored = false)
+    if (anchored || count === 0) return
+    anchored = true
+    await nextTick()
+    if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
+  },
+  { immediate: true, flush: 'post' },
+)
 
 function onTransitionEnd(e: TransitionEvent) {
   if (isLeaveEnd(e)) emit('close')
@@ -122,7 +137,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <button :class="{ on: tab === 'calendar' }" @click="picked = 'calendar'">{{ t('sleep.calendar') }}</button>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <SleepAnalysis v-if="tab === 'analysis'" class="mx-auto max-w-2xl" />
           <p v-else-if="isPending" class="p-6 text-center text-zinc-400">{{ t('common.loading') }}</p>
           <p v-else-if="isError" class="p-6 text-center text-red-600">{{ t('common.loadFailed') }}</p>
