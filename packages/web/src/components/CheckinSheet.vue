@@ -132,6 +132,9 @@ function refresh() {
   queryClient.invalidateQueries({ queryKey: ['events'] })
   queryClient.invalidateQueries({ queryKey: ['cardTags'] })
   queryClient.invalidateQueries({ queryKey: ['cardInputs'] })
+  // Closed report sheets refetch now, so reopening one shows the change at once.
+  queryClient.invalidateQueries({ queryKey: ['calendar'], refetchType: 'all' })
+  queryClient.invalidateQueries({ queryKey: ['sleepAnalysis'], refetchType: 'all' })
   leave()
 }
 const submit = useMutation({
