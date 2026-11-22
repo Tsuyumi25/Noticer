@@ -11,10 +11,11 @@ interface SheetDragOptions {
   /** Return false to keep this touch from pulling the sheet. */
   canDrag?: (e: TouchEvent) => boolean
   instant?: boolean
+  centered?: boolean
 }
 
 /** A full-screen sheet that slides in, follows a downward pull, and slides away when asked to leave. */
-export function useSheetDrag({ onRequestClose, canDrag, instant = false }: SheetDragOptions) {
+export function useSheetDrag({ onRequestClose, canDrag, instant = false, centered = false }: SheetDragOptions) {
   const sheet = ref<HTMLElement | null>(null)
   /** How far the sheet is pushed below full screen, in px; 0 means full screen. */
   const offset = ref(instant ? 0 : window.innerHeight)
@@ -23,6 +24,10 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false }: Sheet
 
   // Full screen has square corners; they round only while the sheet is off its resting place.
   const sheetStyle = computed(() => {
+    if (centered) {
+      const lift = Math.min(40, offset.value)
+      return { transform: `translateY(${lift}px)`, opacity: 1 - lift / 40 }
+    }
     const radius = `${Math.min(16, offset.value / 5)}px`
     return { transform: `translateY(${offset.value}px)`, borderTopLeftRadius: radius, borderTopRightRadius: radius }
   })
@@ -58,7 +63,7 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false }: Sheet
 
   function onTouchStart(e: TouchEvent) {
     const touch = e.touches[0]
-    if (leaving.value || !touch || e.touches.length > 1) return
+    if (centered || leaving.value || !touch || e.touches.length > 1) return
     dragging = (canDrag?.(e) ?? true) && atTop(e.target)
     judged = false
     startX = touch.clientX

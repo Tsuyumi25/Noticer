@@ -7,13 +7,13 @@ import { parseValueKey } from 'server/values'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.ts'
-import CheckinSheet from '../components/CheckinSheet.vue'
-import QuickNoteSheet from '../components/QuickNoteSheet.vue'
-import { asVersion, versionPick, type ConflictEvent } from '../versions.ts'
+import EventEditor from '../components/EventEditor.vue'
+import type { ConflictEvent } from '../versions.ts'
 import AttachmentIcon from '../components/AttachmentIcon.vue'
 import { isVideo, isVisual, previewUrl } from '../attachments.ts'
 import { openViewer } from '../viewer.ts'
 import JournalFinder from '../components/JournalFinder.vue'
+import { configQuery } from '../queries.ts'
 import { usePageSwipe } from '../pageSwipe.ts'
 import { t, tn } from '../i18n/index.ts'
 import { cardColor, tagColors } from '../tagColors.ts'
@@ -66,14 +66,7 @@ watch(
 const pane = ref<HTMLElement | null>(null)
 const swipe = usePageSwipe(pane, { canGo: (step) => step === -1 || !isToday.value, go: (step) => goTo(shiftDay(step)) })
 
-const { data: config } = useQuery({
-  queryKey: ['config'],
-  queryFn: async () => {
-    const res = await api.config.$get()
-    if (!res.ok) throw new Error(`config: ${res.status}`)
-    return res.json()
-  },
-})
+const { data: config } = useQuery(configQuery)
 const cards = computed(() => new Map((config.value?.cards ?? []).map((c) => [c.id, c as CardConfig])))
 const colors = computed(() => (config.value ? tagColors(config.value) : new Map<string, string>()))
 
@@ -118,21 +111,7 @@ const rows = computed(() =>
   }),
 )
 
-const editing = ref<{ card: CardConfig; event: ConflictEvent } | null>(null)
-const editingNote = ref<ConflictEvent | null>(null)
-const version = ref(0)
-const switched = ref(false)
-function edit(event: ConflictEvent) {
-  version.value = 0
-  switched.value = false
-  const card = cards.value.get(event.cardId)
-  if (event.cardId === PURE_CARD) editingNote.value = event
-  else if (card) editing.value = { card, event }
-}
-function showVersion(index: number) {
-  version.value = index
-  switched.value = true
-}
+const editing = ref<ConflictEvent | null>(null)
 
 const finding = ref(false)
 function pickDay(key: string) {
@@ -171,7 +150,7 @@ watch([flash, rows], async ([id]) => {
       <ol v-else class="timeline">
         <template v-for="row in rows" :key="row.event.id">
           <li v-if="row.gapHours" class="gap" aria-hidden="true">{{ tn('time.hours', row.gapHours) }}</li>
-          <li class="row" :class="{ flash: flash === row.event.id }" :data-event="row.event.id" :style="{ '--c': row.color }" role="button" tabindex="0" @click="edit(row.event)" @keydown.enter="edit(row.event)">
+          <li class="row" :class="{ flash: flash === row.event.id }" :data-event="row.event.id" :style="{ '--c': row.color }" role="button" tabindex="0" @click="editing = row.event" @keydown.enter="editing = row.event">
             <div class="time">
               {{ clock(row.event.eventAt * 1000) }}
               <span v-if="row.event.timeOffset < 0" class="late">{{ t('journal.backdated') }}</span>
@@ -221,26 +200,8 @@ watch([flash, rows], async ([id]) => {
 
     <button class="fab" :aria-label="t('journal.finder')" @click="finding = true"><LayoutDashboard :size="24" /></button>
 
-    <JournalFinder v-if="finding" :day="day" @pick="pickDay" @jump="jump" @resolve="edit" @close="finding = false" />
-    <CheckinSheet
-      v-if="editing"
-      :key="`${editing.event.id}-${version}`"
-      :card="{ id: editing.card.id, name: editing.card.name, emoji: editing.card.emoji }"
-      :event="asVersion(editing.event, version)"
-      :versions="versionPick(editing.event, version)"
-      :instant="switched"
-      @version="showVersion"
-      @close="editing = null"
-    />
-    <QuickNoteSheet
-      v-if="editingNote"
-      :key="`${editingNote.id}-${version}`"
-      :event="asVersion(editingNote, version)"
-      :versions="versionPick(editingNote, version)"
-      :instant="switched"
-      @version="showVersion"
-      @close="editingNote = null"
-    />
+    <JournalFinder v-if="finding" :day="day" @pick="pickDay" @jump="jump" @resolve="editing = $event" @close="finding = false" />
+    <EventEditor v-if="editing" :key="editing.id" :event="editing" @close="editing = null" />
   </main>
 </template>
 

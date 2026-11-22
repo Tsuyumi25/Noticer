@@ -2,17 +2,24 @@
 import { useQuery } from '@tanstack/vue-query'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import CardBoard from '../components/CardBoard.vue'
 import CheckinSheet, { type SheetCard } from '../components/CheckinSheet.vue'
+import EventEditor from '../components/EventEditor.vue'
+import RecentPanel from '../components/RecentPanel.vue'
 import ReviewSheet from '../components/ReviewSheet.vue'
 import SleepCard from '../components/SleepCard.vue'
 import WaterCard from '../components/WaterCard.vue'
 import { t } from '../i18n/index.ts'
 import { vLongPress } from '../longPress.ts'
-import { dashboardQuery } from '../queries.ts'
+import { configQuery, dashboardQuery } from '../queries.ts'
+import { isDesktop } from '../viewport.ts'
+import type { ConflictEvent } from '../versions.ts'
 
 const opened = ref<SheetCard | null>(null)
+const editing = ref<ConflictEvent | null>(null)
 
 const { data, isPending, isError } = useQuery({ ...dashboardQuery, refetchInterval: 60_000 })
+const { data: config } = useQuery(configQuery)
 
 const route = useRoute()
 const router = useRouter()
@@ -25,7 +32,15 @@ function closeReview() {
 </script>
 
 <template>
-  <div class="dashboard min-h-dvh">
+  <div v-if="isDesktop" class="dashboard flex h-[calc(100dvh-56px)] gap-3.5 p-3.5">
+    <main class="relative min-w-0 flex-[7] overflow-hidden">
+      <p v-if="isPending" class="p-6 text-center text-white/80">{{ t('common.loading') }}</p>
+      <p v-else-if="isError" class="p-6 text-center text-white">{{ t('common.loadFailed') }}</p>
+      <CardBoard v-else-if="data && config" :dashboard="data" :layout="config.layout" @open="opened = $event" @review="openReview" />
+    </main>
+    <RecentPanel class="min-w-0 flex-[3]" @edit="editing = $event" />
+  </div>
+  <div v-else class="dashboard min-h-dvh">
   <main class="mx-auto flex max-w-2xl flex-col gap-3 p-3">
     <p v-if="isPending" class="p-6 text-center text-white/80">{{ t('common.loading') }}</p>
     <p v-else-if="isError" class="p-6 text-center text-white">{{ t('common.loadFailed') }}</p>
@@ -62,7 +77,9 @@ function closeReview() {
       </template>
     </template>
   </main>
+  </div>
   <CheckinSheet v-if="opened" :key="opened.name" :card="opened" @close="opened = null" />
+  <EventEditor v-if="editing" :key="editing.id" :event="editing" @close="editing = null" />
   <ReviewSheet
     v-if="reviewing"
     :key="reviewing"
@@ -70,7 +87,6 @@ function closeReview() {
     :sleep="reviewing === data?.sleep?.sleepCard.id || reviewing === data?.sleep?.wakeCard.id"
     @close="closeReview"
   />
-  </div>
 </template>
 
 <style scoped>

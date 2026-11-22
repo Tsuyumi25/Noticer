@@ -13,6 +13,8 @@ import TagPicker from './TagPicker.vue'
 import TimeOffsetPopup from './TimeOffsetPopup.vue'
 import ValuePad from './ValuePad.vue'
 import VersionTabs from './VersionTabs.vue'
+import CheckinCalendar from './CheckinCalendar.vue'
+import { isDesktop } from '../viewport.ts'
 import { pickedDeleted, type VersionPick } from '../versions.ts'
 
 export interface SheetCard {
@@ -183,12 +185,17 @@ const remove = useMutation({
 const confirming = ref(false)
 const deleting = ref(false)
 
+const centered = isDesktop.value
+const overlayClass = centered ? 'absolute inset-0 flex items-center justify-center bg-black/40' : 'absolute inset-0 flex items-end bg-black/40'
+const panelClass = centered ? 'w-full max-w-sm rounded-2xl bg-white p-4' : 'w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]'
+
 const { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } =
   useSheetDrag({
     onRequestClose: requestClose,
     // While editing, a press on a tag may become a drag; it must not pull the sheet.
     canDrag: (e) => !confirming.value && !deleting.value && !(editing.value && (e.target as Element).closest('[data-tag]')),
     instant: props.instant,
+    centered,
   })
 
 function requestClose() {
@@ -223,11 +230,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 <template>
   <Teleport to="body">
     <div class="fixed inset-0 z-50">
-      <div class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" />
+      <div class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" @click="centered && requestClose()" />
       <section
         ref="sheet"
-        class="full-sheet"
-        :class="{ 'sheet-animated': animated }"
+        :class="[centered ? 'center-dialog' : 'full-sheet', { 'sheet-animated': animated }]"
         :style="sheetStyle"
         @touchstart="onTouchStart"
         @touchmove="onTouchMove"
@@ -235,131 +241,134 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         @touchcancel="onTouchEnd"
         @transitionend="onTransitionEnd"
       >
-        <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
-        <div class="flex shrink-0 items-center justify-between py-1 pr-2 pl-4">
-          <h2 class="text-lg font-semibold">
-            {{ card.emoji }} {{ card.name }}<span v-if="editing" class="text-sm font-medium text-amber-700">{{ t('sheet.editing') }}</span>
-          </h2>
-          <button v-if="editing" class="h-11 min-w-11 px-2 font-semibold text-indigo-600" @click="editing = false">{{ t('common.done') }}</button>
-          <button v-else class="flex h-11 min-w-11 items-center gap-1 px-2 text-zinc-400" @click="editing = true">
-            <Pencil :size="16" />{{ t('sheet.edit') }}
-          </button>
-        </div>
-        <VersionTabs v-if="versions" :pick="versions" @pick="emit('version', $event)" />
-        <div v-if="!gone" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
-          <button
-            class="mb-1 flex min-h-12 w-full items-center justify-between rounded-xl border border-zinc-200 px-3"
-            @click="timePopup = true"
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div v-if="!centered" class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
+          <div class="flex shrink-0 items-center justify-between py-1 pr-2 pl-4">
+            <h2 class="text-lg font-semibold">
+              {{ card.emoji }} {{ card.name }}<span v-if="editing" class="text-sm font-medium text-amber-700">{{ t('sheet.editing') }}</span>
+            </h2>
+            <button v-if="editing" class="h-11 min-w-11 px-2 font-semibold text-indigo-600" @click="editing = false">{{ t('common.done') }}</button>
+            <button v-else class="flex h-11 min-w-11 items-center gap-1 px-2 text-zinc-400" @click="editing = true">
+              <Pencil :size="16" />{{ t('sheet.edit') }}
+            </button>
+          </div>
+          <VersionTabs v-if="versions" :pick="versions" @pick="emit('version', $event)" />
+          <div v-if="!gone" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+            <button
+              class="mb-1 flex min-h-12 w-full items-center justify-between rounded-xl border border-zinc-200 px-3"
+              @click="timePopup = true"
+            >
+              <span class="flex shrink-0 items-center gap-2 whitespace-nowrap"><Clock :size="18" class="text-zinc-400" />{{ t('sheet.time') }}</span>
+              <span class="flex min-w-0 items-center gap-1 pl-2 text-right" :class="happenedAt === null ? 'text-zinc-500' : 'font-semibold text-amber-700'">
+                {{ timeLabel }}<ChevronRight :size="18" class="text-zinc-400" />
+              </span>
+            </button>
+            <div v-if="autoValues.length" class="mt-3 flex flex-wrap gap-2">
+              <span v-for="v in autoValues" :key="v.tag" class="vchip" :class="{ active: pad === v.tag }">
+                <span class="vname">{{ v.tag }}</span>
+                <button class="vamount" @click="pad = v.tag">{{ amountText(v.tag) }}<small>{{ v.unit }}</small></button>
+              </span>
+            </div>
+            <div v-for="input in choices ? (inputs?.choices ?? []) : []" :key="input.key" class="mt-3 mb-1">
+              <p class="mb-1.5 text-sm text-zinc-500">
+                {{ input.name }}<span v-if="!input.required"> · {{ t('fact.optional') }}</span>
+              </p>
+              <div class="grid gap-1.5" :style="{ gridTemplateColumns: `repeat(${input.options.length}, 1fr)` }">
+                <button
+                  v-for="o in input.options"
+                  :key="o.value"
+                  class="choice"
+                  :class="{ on: choices?.[input.key] === o.value }"
+                  @click="pick(input.key, o.value)"
+                >
+                  <span class="text-[26px] leading-none">{{ o.value }}</span>
+                  <span class="text-xs">{{ o.label }}</span>
+                </button>
+              </div>
+            </div>
+            <TagPicker
+              ref="picker"
+              :card-id="card.id"
+              :editing="editing"
+              :model-value="tags"
+              :values="inputs?.values ?? []"
+              :amounts="amounts"
+              :active-value="pad"
+              @update:model-value="onTags"
+              @value="pad = $event"
+            />
+            <textarea
+              v-model="note"
+              rows="4"
+              :placeholder="t('sheet.notePlaceholder')"
+              class="mt-4 w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
+            />
+            <AttachmentField v-model="attachments" v-model:busy="uploading" />
+          </div>
+          <ValuePad
+            v-if="pad && specOf.get(pad)"
+            :key="pad"
+            :label="pad"
+            :unit="specOf.get(pad)!.unit"
+            :decimals="specOf.get(pad)!.decimals"
+            :value="padValue"
+            :candidates="specOf.get(pad)!.candidates"
+            :fallback="specOf.get(pad)!.default"
+            :row="specOf.get(pad)!.pad ? PAD_ROW_COMPONENTS[specOf.get(pad)!.pad!] : undefined"
+            skippable
+            removable
+            @done="setAmount(pad!, $event)"
+            @remove="dropAmount(pad!)"
+            @cancel="pad = null"
           >
-            <span class="flex shrink-0 items-center gap-2 whitespace-nowrap"><Clock :size="18" class="text-zinc-400" />{{ t('sheet.time') }}</span>
-            <span class="flex min-w-0 items-center gap-1 pl-2 text-right" :class="happenedAt === null ? 'text-zinc-500' : 'font-semibold text-amber-700'">
-              {{ timeLabel }}<ChevronRight :size="18" class="text-zinc-400" />
-            </span>
-          </button>
-          <div v-if="autoValues.length" class="mt-3 flex flex-wrap gap-2">
-            <span v-for="v in autoValues" :key="v.tag" class="vchip" :class="{ active: pad === v.tag }">
-              <span class="vname">{{ v.tag }}</span>
-              <button class="vamount" @click="pad = v.tag">{{ amountText(v.tag) }}<small>{{ v.unit }}</small></button>
-            </span>
-          </div>
-          <div v-for="input in choices ? (inputs?.choices ?? []) : []" :key="input.key" class="mt-3 mb-1">
-            <p class="mb-1.5 text-sm text-zinc-500">
-              {{ input.name }}<span v-if="!input.required"> · {{ t('fact.optional') }}</span>
-            </p>
-            <div class="grid gap-1.5" :style="{ gridTemplateColumns: `repeat(${input.options.length}, 1fr)` }">
-              <button
-                v-for="o in input.options"
-                :key="o.value"
-                class="choice"
-                :class="{ on: choices?.[input.key] === o.value }"
-                @click="pick(input.key, o.value)"
-              >
-                <span class="text-[26px] leading-none">{{ o.value }}</span>
-                <span class="text-xs">{{ o.label }}</span>
-              </button>
+            <template #aside>
+              <span class="text-xs text-zinc-500">{{ specOf.get(pad)!.unit }} · {{ t(specOf.get(pad)!.keep === 'sum' ? 'pad.sum' : 'pad.latest') }}</span>
+            </template>
+          </ValuePad>
+          <footer v-else class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+            <div v-if="editing" class="grid grid-cols-2 gap-3">
+              <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="picker?.addGroup()">{{ t('sheet.addGroup') }}</button>
+              <button class="h-12 rounded-xl bg-indigo-600 font-semibold text-white" @click="editing = false">{{ t('common.done') }}</button>
             </div>
-          </div>
-          <TagPicker
-            ref="picker"
-            :card-id="card.id"
-            :editing="editing"
-            :model-value="tags"
-            :values="inputs?.values ?? []"
-            :amounts="amounts"
-            :active-value="pad"
-            @update:model-value="onTags"
-            @value="pad = $event"
-          />
-          <textarea
-            v-model="note"
-            rows="4"
-            :placeholder="t('sheet.notePlaceholder')"
-            class="mt-4 w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
-          />
-          <AttachmentField v-model="attachments" v-model:busy="uploading" />
+            <template v-else>
+              <p v-if="missing.length" class="mb-2 text-center text-sm text-zinc-500">
+                {{ t('sheet.missing', { names: new Intl.ListFormat(locale).format(missing) }) }}
+              </p>
+              <p v-else-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
+              <div v-if="gone" class="flex gap-3">
+                <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
+                <button class="h-12 flex-1 rounded-xl bg-red-600 font-semibold text-white" @click="deleting = true">{{ t('sheet.delete') }}</button>
+              </div>
+              <div v-else class="flex gap-3">
+                <button
+                  v-if="event"
+                  class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600"
+                  :aria-label="t('sheet.delete')"
+                  @click="deleting = true"
+                >
+                  <Trash2 :size="20" />
+                </button>
+                <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
+                <button
+                  class="h-12 flex-1 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
+                  :disabled="choices === null || missing.length > 0 || uploading || submit.isPending.value || leaving"
+                  @click="submit.mutate()"
+                >
+                  {{ t(event ? 'sheet.save' : 'sheet.submit') }}
+                </button>
+              </div>
+            </template>
+          </footer>
         </div>
-        <ValuePad
-          v-if="pad && specOf.get(pad)"
-          :key="pad"
-          :label="pad"
-          :unit="specOf.get(pad)!.unit"
-          :decimals="specOf.get(pad)!.decimals"
-          :value="padValue"
-          :candidates="specOf.get(pad)!.candidates"
-          :fallback="specOf.get(pad)!.default"
-          :row="specOf.get(pad)!.pad ? PAD_ROW_COMPONENTS[specOf.get(pad)!.pad!] : undefined"
-          skippable
-          removable
-          @done="setAmount(pad!, $event)"
-          @remove="dropAmount(pad!)"
-          @cancel="pad = null"
-        >
-          <template #aside>
-            <span class="text-xs text-zinc-500">{{ specOf.get(pad)!.unit }} · {{ t(specOf.get(pad)!.keep === 'sum' ? 'pad.sum' : 'pad.latest') }}</span>
-          </template>
-        </ValuePad>
-        <footer v-else class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          <div v-if="editing" class="grid grid-cols-2 gap-3">
-            <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="picker?.addGroup()">{{ t('sheet.addGroup') }}</button>
-            <button class="h-12 rounded-xl bg-indigo-600 font-semibold text-white" @click="editing = false">{{ t('common.done') }}</button>
-          </div>
-          <template v-else>
-            <p v-if="missing.length" class="mb-2 text-center text-sm text-zinc-500">
-              {{ t('sheet.missing', { names: new Intl.ListFormat(locale).format(missing) }) }}
-            </p>
-            <p v-else-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
-            <div v-if="gone" class="flex gap-3">
-              <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
-              <button class="h-12 flex-1 rounded-xl bg-red-600 font-semibold text-white" @click="deleting = true">{{ t('sheet.delete') }}</button>
-            </div>
-            <div v-else class="flex gap-3">
-              <button
-                v-if="event"
-                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600"
-                :aria-label="t('sheet.delete')"
-                @click="deleting = true"
-              >
-                <Trash2 :size="20" />
-              </button>
-              <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
-              <button
-                class="h-12 flex-1 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
-                :disabled="choices === null || missing.length > 0 || uploading || submit.isPending.value || leaving"
-                @click="submit.mutate()"
-              >
-                {{ t(event ? 'sheet.save' : 'sheet.submit') }}
-              </button>
-            </div>
-          </template>
-        </footer>
+        <CheckinCalendar v-if="centered" :card-id="card.id" :at="happenedAt" @pick="happenedAt = $event" />
       </section>
 
       <TimeOffsetPopup v-if="timePopup" v-model="happenedAt" @close="timePopup = false" />
-      <div v-if="confirming" class="absolute inset-0 flex items-end bg-black/40" @click.self="confirming = false">
+      <div v-if="confirming" :class="overlayClass" @click.self="confirming = false">
         <div
           role="alertdialog"
           :aria-label="t('sheet.discardLabel')"
-          class="w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+          :class="panelClass"
         >
           <p class="mb-1 text-center font-semibold">{{ t('sheet.discardTitle') }}</p>
           <p class="mb-4 text-center text-sm text-zinc-500">{{ t('sheet.discardBody') }}</p>
@@ -367,8 +376,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <button class="h-12 w-full rounded-xl bg-zinc-100 font-semibold" @click="confirming = false">{{ t('sheet.keepEditing') }}</button>
         </div>
       </div>
-      <div v-if="deleting" class="absolute inset-0 flex items-end bg-black/40" @click.self="deleting = false">
-        <div role="alertdialog" :aria-label="t('sheet.deleteTitle')" class="w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div v-if="deleting" :class="overlayClass" @click.self="deleting = false">
+        <div role="alertdialog" :aria-label="t('sheet.deleteTitle')" :class="panelClass">
           <p class="mb-4 text-center font-semibold">{{ t('sheet.deleteTitle') }}</p>
           <p v-if="remove.error.value" class="mb-2 text-center text-sm text-red-600">{{ remove.error.value.message }}</p>
           <button

@@ -19,6 +19,21 @@
   padding-top: env(safe-area-inset-top);
   background: white;
 }
+.center-dialog {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  width: min(1040px, calc(100vw - 48px));
+  height: min(820px, calc(100dvh - 60px));
+  margin: auto;
+  overflow: hidden;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.3);
+}
+.center-dialog.narrow {
+  width: min(640px, calc(100vw - 48px));
+}
 .sheet-animated {
   transition:
     transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),

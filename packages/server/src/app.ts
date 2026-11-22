@@ -4,7 +4,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { z } from 'zod'
 import { AttachmentFiles, findAttachment, MAX_ATTACHMENT_BYTES, MAX_THUMB_BYTES, saveUpload, sendFile, thumbType, unknownAttachments } from './attachments.ts'
 import { checkinTags, createCheckin, deleteCheckin, findEvent, pickedTags, updateCheckin } from './checkin.ts'
-import { rootUnits, rulesSchema, tagGroupsSchema, valueSpecSchema, type Config, type ConfigStore } from './config.ts'
+import { layoutSchema, rootUnits, rulesSchema, tagGroupsSchema, valueSpecSchema, type Config, type ConfigStore } from './config.ts'
 import { PURE_CARD } from './pure.ts'
 import { buildDashboard } from './dashboard.ts'
 import type { DB } from './db.ts'
@@ -349,6 +349,13 @@ const api = new Hono<Env>()
     c.var.store.update((raw) => {
       raw.tagGroups ??= {}
       raw.tagGroups[root] = { ...raw.tagGroups[root], groups: raw.tagGroups[root]?.groups ?? [], values }
+    })
+    return c.body(null, 204)
+  })
+  .put('/layout', zValidator('json', layoutSchema), (c) => {
+    const layout = c.req.valid('json')
+    c.var.store.update((raw) => {
+      raw.layout = layout
     })
     return c.body(null, 204)
   })

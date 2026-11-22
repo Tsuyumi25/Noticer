@@ -17,3 +17,12 @@ export const conflictsQuery = {
     return res.json()
   },
 }
+
+export const configQuery = {
+  queryKey: ['config'],
+  queryFn: async () => {
+    const res = await api.config.$get()
+    if (!res.ok) throw new Error(`config: ${res.status}`)
+    return res.json()
+  },
+}

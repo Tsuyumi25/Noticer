@@ -6,7 +6,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component 
 import { api } from '../api.ts'
 import { isVideo, isVisual, previewUrl } from '../attachments.ts'
 import { locale, t, tn, type MessageKey } from '../i18n/index.ts'
-import { conflictsQuery } from '../queries.ts'
+import { configQuery, conflictsQuery } from '../queries.ts'
 import { clock } from '../time.ts'
 import { usePageSwipe } from '../pageSwipe.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
@@ -62,14 +62,7 @@ function jump(eventId: number, eventAt: number) {
   leave()
 }
 
-const { data: config } = useQuery({
-  queryKey: ['config'],
-  queryFn: async () => {
-    const res = await api.config.$get()
-    if (!res.ok) throw new Error(`config: ${res.status}`)
-    return res.json()
-  },
-})
+const { data: config } = useQuery(configQuery)
 const cards = computed(() => new Map((config.value?.cards ?? []).map((c) => [c.id, c])))
 const emojiOf = (cardId: string) => (cardId === PURE_CARD ? '📝' : (cards.value.get(cardId)?.emoji ?? '•'))
 

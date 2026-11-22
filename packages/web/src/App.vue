@@ -7,6 +7,7 @@ import QuickNoteSheet from './components/QuickNoteSheet.vue'
 import { t, type MessageKey } from './i18n/index.ts'
 import { conflictsQuery } from './queries.ts'
 import { dayKey, parseDayKey, sameTimeOn } from './time.ts'
+import { isDesktop } from './viewport.ts'
 
 const { data: conflicts } = useQuery(conflictsQuery)
 
@@ -30,10 +31,36 @@ function openQuickNote() {
 </script>
 
 <template>
-  <div class="min-h-dvh pb-[calc(64px+env(safe-area-inset-bottom))]">
+  <header v-if="isDesktop" class="sticky top-0 z-10 flex h-14 items-center gap-1 border-b border-zinc-200 bg-white/95 px-4 backdrop-blur">
+    <span class="mr-4 text-base font-bold">💧 Noticer</span>
+    <RouterLink
+      v-for="tab in [...before, ...after]"
+      :key="tab.to"
+      :to="tab.to"
+      class="flex h-11 items-center gap-2 rounded-lg px-3 text-sm text-zinc-600 hover:bg-zinc-100"
+      exact-active-class="!bg-indigo-50 !text-indigo-700 font-semibold"
+    >
+      <span class="relative">
+        <component :is="tab.icon" :size="18" />
+        <span
+          v-if="tab.to === '/journal' && conflicts?.length"
+          class="absolute -top-1.5 left-3 h-4 min-w-4 rounded-full bg-amber-500 px-1 text-center text-[10.5px] leading-4 font-bold text-white"
+        >
+          {{ conflicts.length }}
+        </span>
+      </span>
+      {{ t(tab.label) }}
+    </RouterLink>
+    <span class="flex-1" />
+    <button class="flex h-11 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 text-sm font-semibold text-white" @click="openQuickNote">
+      <Plus :size="18" />{{ t('nav.quickNote') }}
+    </button>
+  </header>
+  <div :class="isDesktop ? '' : 'min-h-dvh pb-[calc(64px+env(safe-area-inset-bottom))]'">
     <RouterView />
   </div>
   <nav
+    v-if="!isDesktop"
     class="fixed inset-x-0 bottom-0 z-10 flex border-t border-zinc-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
   >
     <RouterLink

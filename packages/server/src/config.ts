@@ -120,6 +120,15 @@ const tagRootSchema = z.object({
   values: z.record(z.string(), valueSpecSchema).optional(),
 })
 
+export const layoutSchema = z.object({
+  arrangement: z.enum(['sections', 'stack']),
+  cardScale: z.number().min(0.8).max(1.6).default(1),
+  maxScale: z.number().min(1).max(1.6),
+  align: z.enum(['left', 'center', 'right']).default('center'),
+})
+
+const defaultLayout: z.infer<typeof layoutSchema> = { arrangement: 'stack', cardScale: 1, maxScale: 1.35, align: 'center' }
+
 export const configSchema = z
   .object({
     cards: z.array(cardSchema),
@@ -127,6 +136,7 @@ export const configSchema = z
     factInputs: z.record(z.string(), factInputSchema).default({}),
     /** What a tag is, in the user's words; it follows the tag under every root. */
     tagNotes: z.record(z.string(), z.string().trim().min(1)).default({}),
+    layout: layoutSchema.default(defaultLayout),
   })
   .superRefine((config, ctx) => {
     for (const card of config.cards) {
@@ -161,8 +171,9 @@ export type FactInput = z.infer<typeof factInputSchema>
 export type ValueSpec = z.infer<typeof valueSpecSchema>
 export type TagGroup = z.infer<typeof tagGroupsSchema>[number]
 export type RuleStatus = z.infer<typeof statusSchema>
+export type Layout = z.infer<typeof layoutSchema>
 
-export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {}, tagNotes: {} }
+export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {}, tagNotes: {}, layout: defaultLayout }
 
 /** The file as stored: card entries keep fields this app does not model yet (memo…). */
 export type RawConfig = {

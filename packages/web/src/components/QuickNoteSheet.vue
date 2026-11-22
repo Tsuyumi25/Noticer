@@ -12,6 +12,7 @@ import AttachmentField from './AttachmentField.vue'
 import type { SheetEvent } from './CheckinSheet.vue'
 import TimeOffsetPopup from './TimeOffsetPopup.vue'
 import VersionTabs from './VersionTabs.vue'
+import { isDesktop } from '../viewport.ts'
 import { pickedDeleted, type VersionPick } from '../versions.ts'
 
 /** A record that belongs to no card: start from any card's tag, or type a new one. */
@@ -129,10 +130,15 @@ const remove = useMutation({
 const confirming = ref(false)
 const deleting = ref(false)
 
+const centered = isDesktop.value
+const overlayClass = centered ? 'absolute inset-0 flex items-center justify-center bg-black/40' : 'absolute inset-0 flex items-end bg-black/40'
+const panelClass = centered ? 'w-full max-w-sm rounded-2xl bg-white p-4' : 'w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]'
+
 const { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } = useSheetDrag({
   onRequestClose: requestClose,
   canDrag: () => !confirming.value && !deleting.value && adding.value === null,
   instant: props.instant,
+  centered,
 })
 
 function requestClose() {
@@ -161,11 +167,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 <template>
   <Teleport to="body">
     <div class="fixed inset-0 z-50">
-      <div class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" />
+      <div class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" @click="centered && requestClose()" />
       <section
         ref="sheet"
-        class="full-sheet"
-        :class="{ 'sheet-animated': animated }"
+        :class="[centered ? 'center-dialog narrow' : 'full-sheet', { 'sheet-animated': animated }]"
         :style="sheetStyle"
         @touchstart="onTouchStart"
         @touchmove="onTouchMove"
@@ -173,79 +178,81 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         @touchcancel="onTouchEnd"
         @transitionend="onTransitionEnd"
       >
-        <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
-        <div class="flex h-12 shrink-0 items-center px-4">
-          <h2 class="text-lg font-semibold">📝 {{ t('nav.quickNote') }}</h2>
-        </div>
-        <VersionTabs v-if="versions" :pick="versions" @pick="emit('version', $event)" />
-        <div v-if="!gone" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
-          <button class="mb-1 flex min-h-12 w-full items-center justify-between rounded-xl border border-zinc-200 px-3" @click="timePopup = true">
-            <span class="flex shrink-0 items-center gap-2 whitespace-nowrap"><Clock :size="18" class="text-zinc-400" />{{ t('sheet.time') }}</span>
-            <span class="flex min-w-0 items-center gap-1 pl-2 text-right" :class="happenedAt === null ? 'text-zinc-500' : 'font-semibold text-amber-700'">
-              {{ timeLabel }}<ChevronRight :size="18" class="text-zinc-400" />
-            </span>
-          </button>
-
-          <div class="chips mt-3">
-            <button v-for="r in start?.roots ?? []" :key="r.tag" class="chip" :class="{ on: selected.has(r.tag) }" @click="toggle(r.tag)">
-              <span v-if="r.emoji" class="emoji">{{ r.emoji }}</span>{{ r.tag }}
-            </button>
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div v-if="!centered" class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
+          <div class="flex h-12 shrink-0 items-center px-4">
+            <h2 class="text-lg font-semibold">📝 {{ t('nav.quickNote') }}</h2>
           </div>
+          <VersionTabs v-if="versions" :pick="versions" @pick="emit('version', $event)" />
+          <div v-if="!gone" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+            <button class="mb-1 flex min-h-12 w-full items-center justify-between rounded-xl border border-zinc-200 px-3" @click="timePopup = true">
+              <span class="flex shrink-0 items-center gap-2 whitespace-nowrap"><Clock :size="18" class="text-zinc-400" />{{ t('sheet.time') }}</span>
+              <span class="flex min-w-0 items-center gap-1 pl-2 text-right" :class="happenedAt === null ? 'text-zinc-500' : 'font-semibold text-amber-700'">
+                {{ timeLabel }}<ChevronRight :size="18" class="text-zinc-400" />
+              </span>
+            </button>
 
-          <section v-for="s in sections" :key="s.root.tag" class="mt-4">
-            <div v-for="g in s.groups" :key="g.name" class="mt-3">
-              <h4 class="gtitle" :style="{ borderLeftColor: g.color }">{{ s.root.emoji }} {{ g.name }}</h4>
-              <div class="chips">
-                <button v-for="x in g.tags" :key="x.label" class="chip" :class="{ on: selected.has(x.label) }" @click="toggle(x.label)">
-                  <span v-if="x.emoji" class="emoji">{{ x.emoji }}</span>{{ x.label }}
-                </button>
-              </div>
+            <div class="chips mt-3">
+              <button v-for="r in start?.roots ?? []" :key="r.tag" class="chip" :class="{ on: selected.has(r.tag) }" @click="toggle(r.tag)">
+                <span v-if="r.emoji" class="emoji">{{ r.emoji }}</span>{{ r.tag }}
+              </button>
             </div>
-          </section>
 
-          <div class="chips mt-4">
-            <button v-for="tag in loose" :key="tag" class="chip on" @click="toggle(tag)">{{ tag }}</button>
-            <button class="chip add" @click="adding = ''">{{ t('tags.custom') }}</button>
+            <section v-for="s in sections" :key="s.root.tag" class="mt-4">
+              <div v-for="g in s.groups" :key="g.name" class="mt-3">
+                <h4 class="gtitle" :style="{ borderLeftColor: g.color }">{{ s.root.emoji }} {{ g.name }}</h4>
+                <div class="chips">
+                  <button v-for="x in g.tags" :key="x.label" class="chip" :class="{ on: selected.has(x.label) }" @click="toggle(x.label)">
+                    <span v-if="x.emoji" class="emoji">{{ x.emoji }}</span>{{ x.label }}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <div class="chips mt-4">
+              <button v-for="tag in loose" :key="tag" class="chip on" @click="toggle(tag)">{{ tag }}</button>
+              <button class="chip add" @click="adding = ''">{{ t('tags.custom') }}</button>
+            </div>
+
+            <textarea
+              v-model="note"
+              rows="4"
+              :placeholder="t('sheet.notePlaceholder')"
+              class="mt-4 w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
+            />
+            <AttachmentField v-model="attachments" v-model:busy="uploading" />
           </div>
-
-          <textarea
-            v-model="note"
-            rows="4"
-            :placeholder="t('sheet.notePlaceholder')"
-            class="mt-4 w-full resize-none rounded-xl border border-zinc-200 p-3 text-base outline-none focus:border-indigo-400"
-          />
-          <AttachmentField v-model="attachments" v-model:busy="uploading" />
+          <footer class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+            <p v-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
+            <div v-if="gone" class="flex gap-3">
+              <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
+              <button class="h-12 flex-1 rounded-xl bg-red-600 font-semibold text-white" @click="deleting = true">{{ t('sheet.delete') }}</button>
+            </div>
+            <div v-else class="flex gap-3">
+              <button
+                v-if="event"
+                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600"
+                :aria-label="t('sheet.delete')"
+                @click="deleting = true"
+              >
+                <Trash2 :size="20" />
+              </button>
+              <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
+              <button
+                class="h-12 flex-1 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
+                :disabled="empty || uploading || submit.isPending.value || leaving"
+                @click="submit.mutate()"
+              >
+                {{ t(event ? 'sheet.save' : 'sheet.submit') }}
+              </button>
+            </div>
+          </footer>
         </div>
-        <footer class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          <p v-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
-          <div v-if="gone" class="flex gap-3">
-            <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
-            <button class="h-12 flex-1 rounded-xl bg-red-600 font-semibold text-white" @click="deleting = true">{{ t('sheet.delete') }}</button>
-          </div>
-          <div v-else class="flex gap-3">
-            <button
-              v-if="event"
-              class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600"
-              :aria-label="t('sheet.delete')"
-              @click="deleting = true"
-            >
-              <Trash2 :size="20" />
-            </button>
-            <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
-            <button
-              class="h-12 flex-1 rounded-xl bg-indigo-600 font-semibold text-white disabled:opacity-40"
-              :disabled="empty || uploading || submit.isPending.value || leaving"
-              @click="submit.mutate()"
-            >
-              {{ t(event ? 'sheet.save' : 'sheet.submit') }}
-            </button>
-          </div>
-        </footer>
       </section>
 
       <TimeOffsetPopup v-if="timePopup" v-model="happenedAt" @close="timePopup = false" />
-      <div v-if="adding !== null" class="absolute inset-0 flex items-end bg-black/40" @click.self="adding = null">
-        <form class="w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]" @submit.prevent="addTag">
+      <div v-if="adding !== null" :class="overlayClass" @click.self="adding = null">
+        <form :class="panelClass" @submit.prevent="addTag">
           <p class="mb-2 font-semibold">{{ t('quickNote.newTag') }}</p>
           <input v-model="adding" v-focus list="quick-note-tags" class="h-11 w-full rounded-xl border border-zinc-300 px-3 text-base" />
           <datalist id="quick-note-tags">
@@ -255,16 +262,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <button type="button" class="mt-2 h-12 w-full rounded-xl bg-zinc-100 font-semibold" @click="adding = null">{{ t('common.cancel') }}</button>
         </form>
       </div>
-      <div v-if="confirming" class="absolute inset-0 flex items-end bg-black/40" @click.self="confirming = false">
-        <div role="alertdialog" :aria-label="t('sheet.discardLabel')" class="w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div v-if="confirming" :class="overlayClass" @click.self="confirming = false">
+        <div role="alertdialog" :aria-label="t('sheet.discardLabel')" :class="panelClass">
           <p class="mb-1 text-center font-semibold">{{ t('sheet.discardTitle') }}</p>
           <p class="mb-4 text-center text-sm text-zinc-500">{{ t('sheet.discardBody') }}</p>
           <button class="mb-2 h-12 w-full rounded-xl bg-red-500 font-semibold text-white" @click="confirming = false; leave()">{{ t('sheet.discard') }}</button>
           <button class="h-12 w-full rounded-xl bg-zinc-100 font-semibold" @click="confirming = false">{{ t('sheet.keepEditing') }}</button>
         </div>
       </div>
-      <div v-if="deleting" class="absolute inset-0 flex items-end bg-black/40" @click.self="deleting = false">
-        <div role="alertdialog" :aria-label="t('sheet.deleteTitle')" class="w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div v-if="deleting" :class="overlayClass" @click.self="deleting = false">
+        <div role="alertdialog" :aria-label="t('sheet.deleteTitle')" :class="panelClass">
           <p class="mb-4 text-center font-semibold">{{ t('sheet.deleteTitle') }}</p>
           <p v-if="remove.error.value" class="mb-2 text-center text-sm text-red-600">{{ remove.error.value.message }}</p>
           <button class="mb-2 h-12 w-full rounded-xl bg-red-500 font-semibold text-white disabled:opacity-40" :disabled="remove.isPending.value" @click="remove.mutate()">
