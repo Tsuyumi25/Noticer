@@ -6,10 +6,12 @@ import { api } from '../api.ts'
 import { dashboardQuery } from '../queries.ts'
 import { t, tn } from '../i18n/index.ts'
 import { absoluteTime, clock, DAY, date, dayName, floorMinute, MINUTE, relativeTime, startOfDay, weekday } from '../time.ts'
+import { isDesktop } from '../viewport.ts'
 
 /** The picked time in ms, or null for "now". */
 const props = defineProps<{ modelValue: number | null }>()
 const emit = defineEmits<{ 'update:modelValue': [value: number | null]; close: [] }>()
+const centered = isDesktop.value
 
 const now = floorMinute(Date.now())
 const draft = ref(props.modelValue ?? now)
@@ -187,80 +189,82 @@ onMounted(() => revealSelected('center'))
 
 <template>
   <Teleport to="body">
-    <div class="popup">
-      <header class="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
-        <h2 class="text-[17px] font-semibold">{{ t('time.title') }}</h2>
-        <div class="switch">
-          <button :class="{ on: view === 'events' }" @click="switchView('events')">{{ t('time.events') }}</button>
-          <button :class="{ on: view === 'input' }" @click="switchView('input')">{{ t('time.input') }}</button>
-        </div>
-      </header>
-
-      <div class="grid shrink-0 grid-cols-[64px_1fr_64px] items-center px-2 pb-3">
-        <button
-          class="flex h-11 flex-col items-center justify-center text-xs text-zinc-500 disabled:opacity-30"
-          :disabled="preview === now && !expr"
-          :aria-label="t('time.backToNow')"
-          @click="setDraft(now)"
-        >
-          <RotateCcw :size="16" />{{ t('time.now') }}
-        </button>
-        <div class="text-center">
-          <div class="text-[28px] leading-tight font-bold">{{ relativeTime(preview, now) }}</div>
-          <div class="text-[15px] text-zinc-500">{{ absoluteTime(preview, now) }}</div>
-          <div v-if="hint" class="text-[13px] text-indigo-700">{{ hint }}</div>
-          <div v-if="preview > now" class="text-[13px] text-red-600">{{ t('time.future') }}</div>
-        </div>
-      </div>
-
-      <div class="grid shrink-0 grid-cols-4 gap-2 px-4 pb-3">
-        <button v-for="m in [-5, -1, 1, 5]" :key="m" class="fine" @click="setDraft(draft + m * MINUTE)">
-          {{ m < 0 ? '−' : '+' }}{{ t('time.fine', { n: Math.abs(m) }) }}
-        </button>
-      </div>
-
-      <div v-if="view === 'events'" ref="timeline" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
-        <template v-for="s in slots" :key="s.at">
-          <div v-if="s.day" class="day">{{ s.day }}</div>
-          <div class="slot" :class="{ hour: s.hour, selected: draft >= s.at && draft < s.at + SLOT }" @click="setDraft(s.at)">
-            <span class="w-11 shrink-0 text-xs tabular-nums">{{ clock(s.at) }}</span>
-            <button v-for="e in s.events" :key="e.at" class="event" @click.stop="setDraft(e.at)">{{ e.label }}</button>
+    <div :class="{ scrim: centered }" @click.self="centered && emit('close')">
+      <div class="popup" :class="{ panel: centered }">
+        <header class="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
+          <h2 class="text-[17px] font-semibold">{{ t('time.title') }}</h2>
+          <div class="switch">
+            <button :class="{ on: view === 'events' }" @click="switchView('events')">{{ t('time.events') }}</button>
+            <button :class="{ on: view === 'input' }" @click="switchView('input')">{{ t('time.input') }}</button>
           </div>
-        </template>
-      </div>
+        </header>
 
-      <div v-else class="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-4 pb-3">
-        <div class="flex items-center justify-center tabular-nums">
-          <template v-for="(value, i) in parts(draft)" :key="i">
-            <button
-              class="segment"
-              :class="{ on: i === segment && !expr, relative: i === segment && expr }"
-              @click="focus(i)"
-            >
-              {{ segmentText(i, value) }}
-            </button>
-            <span v-if="i < 2" class="px-px text-xl text-zinc-400">/</span>
-            <span v-else-if="i === 2" class="px-1.5 text-xs text-zinc-400">{{ weekday(draft) }}</span>
-            <span v-else-if="i === 3" class="px-px text-xl text-zinc-400">:</span>
+        <div class="grid shrink-0 grid-cols-[64px_1fr_64px] items-center px-2 pb-3">
+          <button
+            class="flex h-11 flex-col items-center justify-center text-xs text-zinc-500 disabled:opacity-30"
+            :disabled="preview === now && !expr"
+            :aria-label="t('time.backToNow')"
+            @click="setDraft(now)"
+          >
+            <RotateCcw :size="16" />{{ t('time.now') }}
+          </button>
+          <div class="text-center">
+            <div class="text-[28px] leading-tight font-bold">{{ relativeTime(preview, now) }}</div>
+            <div class="text-[15px] text-zinc-500">{{ absoluteTime(preview, now) }}</div>
+            <div v-if="hint" class="text-[13px] text-indigo-700">{{ hint }}</div>
+            <div v-if="preview > now" class="text-[13px] text-red-600">{{ t('time.future') }}</div>
+          </div>
+        </div>
+
+        <div class="grid shrink-0 grid-cols-4 gap-2 px-4 pb-3">
+          <button v-for="m in [-5, -1, 1, 5]" :key="m" class="fine" @click="setDraft(draft + m * MINUTE)">
+            {{ m < 0 ? '−' : '+' }}{{ t('time.fine', { n: Math.abs(m) }) }}
+          </button>
+        </div>
+
+        <div v-if="view === 'events'" ref="timeline" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
+          <template v-for="s in slots" :key="s.at">
+            <div v-if="s.day" class="day">{{ s.day }}</div>
+            <div class="slot" :class="{ hour: s.hour, selected: draft >= s.at && draft < s.at + SLOT }" @click="setDraft(s.at)">
+              <span class="w-11 shrink-0 text-xs tabular-nums">{{ clock(s.at) }}</span>
+              <button v-for="e in s.events" :key="e.at" class="event" @click.stop="setDraft(e.at)">{{ e.label }}</button>
+            </div>
           </template>
         </div>
-        <div class="keys">
-          <button v-for="n in [1, 2, 3]" :key="n" @click="digit(String(n))">{{ n }}</button>
-          <button class="op" @click="sign(-1)">−</button>
-          <button v-for="n in [4, 5, 6]" :key="n" @click="digit(String(n))">{{ n }}</button>
-          <button class="op" @click="sign(1)">＋</button>
-          <button v-for="n in [7, 8, 9]" :key="n" @click="digit(String(n))">{{ n }}</button>
-          <button class="eq" @click="commit()">＝</button>
-          <button class="op" :aria-label="t('time.prevUnit')" @click="focus(segment - 1)">←</button>
-          <button @click="digit('0')">0</button>
-          <button class="op" :aria-label="t('time.nextUnit')" @click="focus(segment + 1)">→</button>
-        </div>
-      </div>
 
-      <footer class="grid shrink-0 grid-cols-2 gap-3 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-        <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="emit('close')">{{ t('common.cancel') }}</button>
-        <button class="h-12 rounded-xl bg-indigo-600 font-semibold text-white" @click="done">{{ t('common.done') }}</button>
-      </footer>
+        <div v-else class="flex min-h-0 flex-1 flex-col justify-end gap-3 overflow-y-auto px-4 pb-3">
+          <div class="flex items-center justify-center tabular-nums">
+            <template v-for="(value, i) in parts(draft)" :key="i">
+              <button
+                class="segment"
+                :class="{ on: i === segment && !expr, relative: i === segment && expr }"
+                @click="focus(i)"
+              >
+                {{ segmentText(i, value) }}
+              </button>
+              <span v-if="i < 2" class="px-px text-xl text-zinc-400">/</span>
+              <span v-else-if="i === 2" class="px-1.5 text-xs text-zinc-400">{{ weekday(draft) }}</span>
+              <span v-else-if="i === 3" class="px-px text-xl text-zinc-400">:</span>
+            </template>
+          </div>
+          <div class="keys">
+            <button v-for="n in [1, 2, 3]" :key="n" @click="digit(String(n))">{{ n }}</button>
+            <button class="op" @click="sign(-1)">−</button>
+            <button v-for="n in [4, 5, 6]" :key="n" @click="digit(String(n))">{{ n }}</button>
+            <button class="op" @click="sign(1)">＋</button>
+            <button v-for="n in [7, 8, 9]" :key="n" @click="digit(String(n))">{{ n }}</button>
+            <button class="eq" @click="commit()">＝</button>
+            <button class="op" :aria-label="t('time.prevUnit')" @click="focus(segment - 1)">←</button>
+            <button @click="digit('0')">0</button>
+            <button class="op" :aria-label="t('time.nextUnit')" @click="focus(segment + 1)">→</button>
+          </div>
+        </div>
+
+        <footer class="grid shrink-0 grid-cols-2 gap-3 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <button class="h-12 rounded-xl bg-zinc-100 font-semibold" @click="emit('close')">{{ t('common.cancel') }}</button>
+          <button class="h-12 rounded-xl bg-indigo-600 font-semibold text-white" @click="done">{{ t('common.done') }}</button>
+        </footer>
+      </div>
     </div>
   </Teleport>
 </template>
@@ -274,6 +278,25 @@ onMounted(() => revealSelected('center'))
   flex-direction: column;
   padding-top: env(safe-area-inset-top);
   background: white;
+}
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.3);
+}
+.popup.panel {
+  position: relative;
+  inset: auto;
+  width: 440px;
+  height: min(760px, calc(100dvh - 60px));
+  padding-top: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.3);
 }
 .switch {
   display: grid;

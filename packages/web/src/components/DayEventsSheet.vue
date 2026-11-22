@@ -5,9 +5,11 @@ import { computed, onMounted, onUnmounted } from 'vue'
 import { api } from '../api.ts'
 import { t } from '../i18n/index.ts'
 import { clock, date as formatDate } from '../time.ts'
+import { isDesktop } from '../viewport.ts'
 
 const props = defineProps<{ cardId: string; cardTag: string; date: string }>()
 const emit = defineEmits<{ close: [] }>()
+const centered = isDesktop.value
 
 const start = computed(() => new Date(`${props.date}T00:00`))
 const range = computed(() => {
@@ -52,9 +54,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
 
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-50 flex items-end bg-black/40" @click.self="emit('close')">
-      <section class="flex max-h-[75dvh] w-full flex-col rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)]">
-        <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
+    <div class="fixed inset-0 z-50 flex bg-black/40" :class="centered ? 'items-center justify-center p-6' : 'items-end'" @click.self="emit('close')">
+      <section
+        class="flex w-full flex-col bg-white"
+        :class="centered ? 'max-h-[min(640px,80dvh)] max-w-md rounded-2xl' : 'max-h-[75dvh] rounded-t-2xl pb-[env(safe-area-inset-bottom)]'"
+      >
+        <div v-if="!centered" class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
         <h2 class="shrink-0 px-4 pt-2 pb-1 text-base font-semibold">
           {{ formatDate(start.getTime(), true) }}
         </h2>
