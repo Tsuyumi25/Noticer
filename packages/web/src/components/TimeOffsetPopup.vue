@@ -324,6 +324,7 @@ onMounted(() => revealSelected('center'))
   align-items: center;
   gap: 8px;
   min-height: 40px;
+  cursor: pointer;
   padding: 2px 4px;
   border-bottom: 1px dashed #f1f5f9;
   color: #9ca3af;
