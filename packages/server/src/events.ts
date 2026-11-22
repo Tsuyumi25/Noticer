@@ -12,6 +12,19 @@ export interface EventRecord {
   tags: string[]
   facts: Record<string, FactValue>
   attachments: Attachment[]
+  versions: EventVersion[]
+}
+
+export interface EventVersion {
+  id: number
+  device: string
+  editedAt: number
+  shown: boolean
+  deleted: boolean
+  eventAt: number | null
+  note: string | null
+  tags: string[]
+  facts: Record<string, FactValue>
 }
 
 interface EventRow {
@@ -23,6 +36,7 @@ interface EventRow {
   tags: string
   facts: string
   attachments: string
+  versions: string
 }
 
 type FactPair = ['text' | 'integer' | 'real' | 'boolean', string | number]
@@ -36,13 +50,25 @@ const eventColumns = `
     (SELECT json_group_object(f.k, json_array(f.type, f.value))
        FROM checkin_facts f WHERE f.checkin_id = e.id) AS facts,
     (SELECT json_group_array(json_object('id', id, 'name', name, 'type', type, 'size', size, 'thumb', json(iif(thumb, 'true', 'false')), 'width', width, 'height', height))
-       FROM (SELECT * FROM checkin_attachments a WHERE a.checkin_id = e.id ORDER BY a.sort_order)) AS attachments
+       FROM (SELECT * FROM checkin_attachments a WHERE a.checkin_id = e.id ORDER BY a.sort_order)) AS attachments,
+    (SELECT json_group_array(json_object('id', id, 'device', device, 'editedAt', edited_at, 'shown', json(iif(shown, 'true', 'false')),
+       'deleted', json(iif(deleted, 'true', 'false')), 'eventAt', event_at, 'note', note, 'tags', json(tags), 'facts', json(facts)))
+       FROM (SELECT * FROM event_versions v WHERE v.event_id = e.id ORDER BY v.shown DESC, v.id)) AS versions
   FROM events e`
 
 export function listEvents(db: DB, from: number, to: number): EventRecord[] {
   return db
     .prepare<[number, number], EventRow>(`${eventColumns} WHERE e.event_at >= ? AND e.event_at < ? ORDER BY e.event_at, e.id`)
     .all(from, to)
+    .map(toRecord)
+}
+
+export function listConflicts(db: DB): EventRecord[] {
+  return db
+    .prepare<[], EventRow>(
+      `${eventColumns} WHERE EXISTS (SELECT 1 FROM event_versions v WHERE v.event_id = e.id) ORDER BY e.event_at DESC, e.id DESC`,
+    )
+    .all()
     .map(toRecord)
 }
 
@@ -124,5 +150,6 @@ function toRecord(row: EventRow): EventRecord {
       ]),
     ),
     attachments: JSON.parse(row.attachments) as Attachment[],
+    versions: JSON.parse(row.versions) as EventVersion[],
   }
 }

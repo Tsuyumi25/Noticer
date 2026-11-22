@@ -286,6 +286,8 @@ export default {
   'finder.results.one': '{n} 筆',
   'finder.results.other': '{n} 筆',
   'finder.noMedia': '還沒有圖片或影片',
+  'finder.conflicts': '衝突',
+  'conflict.deleted': '已刪除',
   'attach.unreadable': '這個檔案沒辦法顯示',
   'attach.zoom': '縮放',
   'attach.previous': '上一個',

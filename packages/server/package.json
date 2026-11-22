@@ -7,6 +7,7 @@
     "./attachments": "./src/attachments.ts",
     "./config": "./src/config.ts",
     "./dashboard": "./src/dashboard.ts",
+    "./events": "./src/events.ts",
     "./facts": "./src/facts.ts",
     "./pure": "./src/pure.ts",
     "./review": "./src/review.ts",

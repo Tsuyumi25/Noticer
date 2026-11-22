@@ -12,6 +12,8 @@ import AttachmentField from './AttachmentField.vue'
 import TagPicker from './TagPicker.vue'
 import TimeOffsetPopup from './TimeOffsetPopup.vue'
 import ValuePad from './ValuePad.vue'
+import VersionTabs from './VersionTabs.vue'
+import { pickedDeleted, type VersionPick } from '../versions.ts'
 
 export interface SheetCard {
   id: string
@@ -29,8 +31,9 @@ export interface SheetEvent {
   attachments: Attachment[]
 }
 
-const props = defineProps<{ card: SheetCard; event?: SheetEvent }>()
-const emit = defineEmits<{ close: [] }>()
+const props = defineProps<{ card: SheetCard; event?: SheetEvent; versions?: VersionPick; instant?: boolean }>()
+const emit = defineEmits<{ close: []; version: [index: number] }>()
+const gone = computed(() => pickedDeleted(props.versions))
 
 const initialNote = props.event?.note ?? ''
 const note = ref(initialNote)
@@ -137,6 +140,7 @@ const queryClient = useQueryClient()
 function refresh() {
   queryClient.invalidateQueries({ queryKey: ['dashboard'] })
   queryClient.invalidateQueries({ queryKey: ['events'] })
+  queryClient.invalidateQueries({ queryKey: ['conflicts'] })
   queryClient.invalidateQueries({ queryKey: ['cardTags'] })
   queryClient.invalidateQueries({ queryKey: ['cardInputs'] })
   queryClient.invalidateQueries({ queryKey: ['media'] })
@@ -184,6 +188,7 @@ const { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEn
     onRequestClose: requestClose,
     // While editing, a press on a tag may become a drag; it must not pull the sheet.
     canDrag: (e) => !confirming.value && !deleting.value && !(editing.value && (e.target as Element).closest('[data-tag]')),
+    instant: props.instant,
   })
 
 function requestClose() {
@@ -240,7 +245,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             <Pencil :size="16" />{{ t('sheet.edit') }}
           </button>
         </div>
-        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+        <VersionTabs v-if="versions" :pick="versions" @pick="emit('version', $event)" />
+        <div v-if="!gone" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
           <button
             class="mb-1 flex min-h-12 w-full items-center justify-between rounded-xl border border-zinc-200 px-3"
             @click="timePopup = true"
@@ -322,7 +328,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               {{ t('sheet.missing', { names: new Intl.ListFormat(locale).format(missing) }) }}
             </p>
             <p v-else-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
-            <div class="flex gap-3">
+            <div v-if="gone" class="flex gap-3">
+              <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
+              <button class="h-12 flex-1 rounded-xl bg-red-600 font-semibold text-white" @click="deleting = true">{{ t('sheet.delete') }}</button>
+            </div>
+            <div v-else class="flex gap-3">
               <button
                 v-if="event"
                 class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600"

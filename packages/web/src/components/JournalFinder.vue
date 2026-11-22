@@ -1,37 +1,47 @@
 <script setup lang="ts">
 import { useInfiniteQuery, useQuery } from '@tanstack/vue-query'
-import { CalendarDays, Images, Play, Search } from 'lucide-vue-next'
+import { CalendarDays, CircleQuestionMark, Images, Play, Search } from 'lucide-vue-next'
 import { PURE_CARD } from 'server/pure'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { api } from '../api.ts'
 import { isVideo, isVisual, previewUrl } from '../attachments.ts'
 import { locale, t, tn, type MessageKey } from '../i18n/index.ts'
+import { conflictsQuery } from '../queries.ts'
 import { clock } from '../time.ts'
 import { usePageSwipe } from '../pageSwipe.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
 import { openViewer } from '../viewer.ts'
 import AttachmentIcon from './AttachmentIcon.vue'
 import JournalCalendar from './JournalCalendar.vue'
+import type { ConflictEvent } from '../versions.ts'
 
-/** Finding a picture, a day or an entry: the gallery opens first; the calendar and search sit beside it, a swipe away. */
+/** Finding a picture, a day or an entry: the gallery opens first; the calendar, search and any conflicts sit beside it, a swipe away. */
 const props = defineProps<{ day: Date }>()
-const emit = defineEmits<{ pick: [day: string]; jump: [eventId: number, eventAt: number]; close: [] }>()
+const emit = defineEmits<{ pick: [day: string]; jump: [eventId: number, eventAt: number]; resolve: [event: ConflictEvent]; close: [] }>()
 
-type Tab = 'calendar' | 'search' | 'gallery'
-const tabs: { key: Tab; icon: Component; label: MessageKey }[] = [
-  { key: 'gallery', icon: Images, label: 'finder.gallery' },
-  { key: 'calendar', icon: CalendarDays, label: 'journal.calendar' },
-  { key: 'search', icon: Search, label: 'finder.search' },
-]
+type Tab = 'calendar' | 'search' | 'gallery' | 'conflicts'
+const { data: conflicts } = useQuery(conflictsQuery)
+const tabs = computed(() => {
+  const all: { key: Tab; icon: Component; label: MessageKey }[] = [
+    { key: 'gallery', icon: Images, label: 'finder.gallery' },
+    { key: 'calendar', icon: CalendarDays, label: 'journal.calendar' },
+    { key: 'search', icon: Search, label: 'finder.search' },
+  ]
+  if (conflicts.value?.length) all.push({ key: 'conflicts', icon: CircleQuestionMark, label: 'finder.conflicts' })
+  return all
+})
 const tab = ref<Tab>('gallery')
+watch(tabs, (list) => {
+  if (!list.some((x) => x.key === tab.value)) tab.value = list.at(-1)!.key
+})
 
 // Swiping sideways turns to the tab beside this one.
 const pane = ref<HTMLElement | null>(null)
-const tabIndex = computed(() => tabs.findIndex((x) => x.key === tab.value))
+const tabIndex = computed(() => tabs.value.findIndex((x) => x.key === tab.value))
 const swipe = usePageSwipe(pane, {
-  canGo: (step) => tabs[tabIndex.value + step] !== undefined,
+  canGo: (step) => tabs.value[tabIndex.value + step] !== undefined,
   go: async (step) => {
-    tab.value = tabs[tabIndex.value + step]!.key
+    tab.value = tabs.value[tabIndex.value + step]!.key
     await nextTick()
   },
 })
@@ -195,6 +205,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             </div>
           </template>
 
+          <div v-else-if="tab === 'conflicts'" class="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
+            <button v-for="e in conflicts ?? []" :key="e.id" class="result" @click="emit('resolve', e)">
+              <span class="node">{{ emojiOf(e.cardId) }}</span>
+              <span class="min-w-0">
+                <span class="block text-xs text-zinc-500">{{ dateTime(e.eventAt) }}</span>
+                <span v-if="shownTags(e.cardId, e.tags).length" class="mt-0.5 flex flex-wrap gap-1">
+                  <span v-for="tag in shownTags(e.cardId, e.tags)" :key="tag" class="tag">{{ tag }}</span>
+                </span>
+                <span v-if="e.note" class="note">{{ e.note }}</span>
+              </span>
+            </button>
+          </div>
+
           <div v-else class="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
             <p v-if="media && media.length === 0" class="py-10 text-center text-sm text-zinc-400">{{ t('finder.noMedia') }}</p>
             <section v-for="m in months" :key="m.title">
@@ -218,18 +241,20 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 <style scoped>
 .seg {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
   padding: 3px;
   border-radius: 12px;
   background: #f4f4f5;
 }
 .seg button {
   display: flex;
+  flex: 1 1 auto;
   height: 40px;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
+  padding: 0 6px;
+  white-space: nowrap;
   border-radius: 9px;
   color: #52525b;
   font-size: 14px;

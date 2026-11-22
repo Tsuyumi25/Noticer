@@ -287,6 +287,8 @@ export default {
   'finder.results.one': '{n} entry',
   'finder.results.other': '{n} entries',
   'finder.noMedia': 'No pictures or videos yet',
+  'finder.conflicts': 'Conflicts',
+  'conflict.deleted': 'Deleted',
   'attach.unreadable': 'This file can’t be shown',
   'attach.zoom': 'Zoom',
   'attach.previous': 'Previous',

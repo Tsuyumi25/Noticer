@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
 import { BookOpen, House, Plus, Settings } from 'lucide-vue-next'
 import { ref, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 import QuickNoteSheet from './components/QuickNoteSheet.vue'
 import { t, type MessageKey } from './i18n/index.ts'
+import { conflictsQuery } from './queries.ts'
 import { dayKey, parseDayKey, sameTimeOn } from './time.ts'
+
+const { data: conflicts } = useQuery(conflictsQuery)
 
 type Tab = { to: string; icon: Component; label: MessageKey }
 const before: Tab[] = [
@@ -39,7 +43,15 @@ function openQuickNote() {
       class="flex h-16 flex-1 flex-col items-center justify-center gap-1 text-xs text-zinc-500"
       exact-active-class="!text-indigo-600 font-semibold"
     >
-      <component :is="tab.icon" :size="22" />
+      <span class="relative">
+        <component :is="tab.icon" :size="22" />
+        <span
+          v-if="tab.to === '/journal' && conflicts?.length"
+          class="absolute -top-1.5 left-4 h-4 min-w-4 rounded-full bg-amber-500 px-1 text-center text-[10.5px] leading-4 font-bold text-white"
+        >
+          {{ conflicts.length }}
+        </span>
+      </span>
       {{ t(tab.label) }}
     </RouterLink>
     <button class="flex h-16 flex-1 flex-col items-center justify-center gap-1 text-xs text-zinc-500" @click="openQuickNote">

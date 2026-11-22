@@ -72,6 +72,7 @@ export function updateCheckin(db: DB, files: AttachmentFiles, id: number, choice
       JSON.stringify(choiceKeys),
     )
     writeTagsAndFacts(db, id, tags, facts)
+    db.prepare('DELETE FROM event_versions WHERE event_id = ?').run(id)
     return setAttachments(db, files, id, attachments)
   })()
   for (const attachment of dropped) files.remove(attachment)

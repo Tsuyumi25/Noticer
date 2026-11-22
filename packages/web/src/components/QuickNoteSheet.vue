@@ -11,11 +11,14 @@ import type { Attachment } from '../attachments.ts'
 import AttachmentField from './AttachmentField.vue'
 import type { SheetEvent } from './CheckinSheet.vue'
 import TimeOffsetPopup from './TimeOffsetPopup.vue'
+import VersionTabs from './VersionTabs.vue'
+import { pickedDeleted, type VersionPick } from '../versions.ts'
 
 /** A record that belongs to no card: start from any card's tag, or type a new one. */
 /** `at`: when a new note starts out, if not now. */
-const props = defineProps<{ event?: SheetEvent; at?: number }>()
-const emit = defineEmits<{ close: [] }>()
+const props = defineProps<{ event?: SheetEvent; at?: number; versions?: VersionPick; instant?: boolean }>()
+const emit = defineEmits<{ close: []; version: [index: number] }>()
+const gone = computed(() => pickedDeleted(props.versions))
 
 const initialNote = props.event?.note ?? ''
 const initialTags = [...(props.event?.tags ?? [])].sort().join('\n')
@@ -92,7 +95,7 @@ const dirty = computed(
 
 const queryClient = useQueryClient()
 function refresh() {
-  for (const key of ['dashboard', 'events', 'cardTags', 'rootTags', 'pure', 'media', 'search', 'days']) queryClient.invalidateQueries({ queryKey: [key] })
+  for (const key of ['dashboard', 'events', 'conflicts', 'cardTags', 'rootTags', 'pure', 'media', 'search', 'days']) queryClient.invalidateQueries({ queryKey: [key] })
   queryClient.invalidateQueries({ queryKey: ['calendar'], refetchType: 'all' })
   queryClient.invalidateQueries({ queryKey: ['sleepAnalysis'], refetchType: 'all' })
   leave()
@@ -129,6 +132,7 @@ const deleting = ref(false)
 const { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } = useSheetDrag({
   onRequestClose: requestClose,
   canDrag: () => !confirming.value && !deleting.value && adding.value === null,
+  instant: props.instant,
 })
 
 function requestClose() {
@@ -173,7 +177,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <div class="flex h-12 shrink-0 items-center px-4">
           <h2 class="text-lg font-semibold">📝 {{ t('nav.quickNote') }}</h2>
         </div>
-        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+        <VersionTabs v-if="versions" :pick="versions" @pick="emit('version', $event)" />
+        <div v-if="!gone" class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
           <button class="mb-1 flex min-h-12 w-full items-center justify-between rounded-xl border border-zinc-200 px-3" @click="timePopup = true">
             <span class="flex shrink-0 items-center gap-2 whitespace-nowrap"><Clock :size="18" class="text-zinc-400" />{{ t('sheet.time') }}</span>
             <span class="flex min-w-0 items-center gap-1 pl-2 text-right" :class="happenedAt === null ? 'text-zinc-500' : 'font-semibold text-amber-700'">
@@ -213,7 +218,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         </div>
         <footer class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <p v-if="submit.error.value" class="mb-2 text-center text-sm text-red-600">{{ submit.error.value.message }}</p>
-          <div class="flex gap-3">
+          <div v-if="gone" class="flex gap-3">
+            <button class="h-12 flex-1 rounded-xl bg-zinc-100 font-semibold" @click="requestClose">{{ t('common.cancel') }}</button>
+            <button class="h-12 flex-1 rounded-xl bg-red-600 font-semibold text-white" @click="deleting = true">{{ t('sheet.delete') }}</button>
+          </div>
+          <div v-else class="flex gap-3">
             <button
               v-if="event"
               class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600"

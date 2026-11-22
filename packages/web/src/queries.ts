@@ -8,3 +8,12 @@ export const dashboardQuery = {
     return res.json()
   },
 }
+
+export const conflictsQuery = {
+  queryKey: ['conflicts'],
+  queryFn: async () => {
+    const res = await api.conflicts.$get()
+    if (!res.ok) throw new Error(`conflicts: ${res.status}`)
+    return res.json()
+  },
+}

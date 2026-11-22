@@ -3,19 +3,21 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 const DAMPING = 0.6
 /** Pixels the finger travels before the pull is judged: down pulls the sheet, sideways belongs to whatever swipes. */
 const AXIS_THRESHOLD = 10
+let open = 0
 
 interface SheetDragOptions {
   /** A pull far or fast enough asks to close; the sheet decides whether to leave. */
   onRequestClose: () => void
   /** Return false to keep this touch from pulling the sheet. */
   canDrag?: (e: TouchEvent) => boolean
+  instant?: boolean
 }
 
 /** A full-screen sheet that slides in, follows a downward pull, and slides away when asked to leave. */
-export function useSheetDrag({ onRequestClose, canDrag }: SheetDragOptions) {
+export function useSheetDrag({ onRequestClose, canDrag, instant = false }: SheetDragOptions) {
   const sheet = ref<HTMLElement | null>(null)
   /** How far the sheet is pushed below full screen, in px; 0 means full screen. */
-  const offset = ref(window.innerHeight)
+  const offset = ref(instant ? 0 : window.innerHeight)
   const animated = ref(true)
   const leaving = ref(false)
 
@@ -96,12 +98,12 @@ export function useSheetDrag({ onRequestClose, canDrag }: SheetDragOptions) {
   }
 
   onMounted(() => {
-    document.documentElement.style.overflow = 'hidden'
+    if (open++ === 0) document.documentElement.style.overflow = 'hidden'
     // Paint the off-screen position first so the slide-in animates.
-    requestAnimationFrame(() => requestAnimationFrame(() => (offset.value = 0)))
+    if (!instant) requestAnimationFrame(() => requestAnimationFrame(() => (offset.value = 0)))
   })
   onUnmounted(() => {
-    document.documentElement.style.overflow = ''
+    if (--open === 0) document.documentElement.style.overflow = ''
   })
 
   return { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd }

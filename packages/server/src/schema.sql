@@ -62,3 +62,18 @@ CREATE TABLE IF NOT EXISTS checkin_attachments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_checkin_attachments_checkin_id ON checkin_attachments (checkin_id);
+
+CREATE TABLE IF NOT EXISTS event_versions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id   INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  device     TEXT    NOT NULL,
+  edited_at  INTEGER NOT NULL,
+  shown      INTEGER NOT NULL DEFAULT 0 CHECK (shown IN (0, 1)),
+  deleted    INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
+  event_at   INTEGER,
+  note       TEXT,
+  tags       TEXT    NOT NULL DEFAULT '[]',
+  facts      TEXT    NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_versions_event_id ON event_versions (event_id);

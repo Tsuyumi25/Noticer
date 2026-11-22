@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { ChevronLeft, ChevronRight, LayoutDashboard } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, CircleQuestionMark, LayoutDashboard } from 'lucide-vue-next'
 import type { CardConfig } from 'server/config'
 import { PURE_CARD } from 'server/pure'
 import { parseValueKey } from 'server/values'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.ts'
-import CheckinSheet, { type SheetEvent } from '../components/CheckinSheet.vue'
+import CheckinSheet from '../components/CheckinSheet.vue'
 import QuickNoteSheet from '../components/QuickNoteSheet.vue'
+import { asVersion, versionPick, type ConflictEvent } from '../versions.ts'
 import AttachmentIcon from '../components/AttachmentIcon.vue'
 import { isVideo, isVisual, previewUrl } from '../attachments.ts'
 import { openViewer } from '../viewer.ts'
@@ -117,11 +118,20 @@ const rows = computed(() =>
   }),
 )
 
-const editing = ref<{ card: CardConfig; event: SheetEvent } | null>(null)
-const editingNote = ref<SheetEvent | null>(null)
-function edit(row: (typeof rows.value)[number]) {
-  if (row.quick) editingNote.value = row.event
-  else if (row.card) editing.value = { card: row.card, event: row.event }
+const editing = ref<{ card: CardConfig; event: ConflictEvent } | null>(null)
+const editingNote = ref<ConflictEvent | null>(null)
+const version = ref(0)
+const switched = ref(false)
+function edit(event: ConflictEvent) {
+  version.value = 0
+  switched.value = false
+  const card = cards.value.get(event.cardId)
+  if (event.cardId === PURE_CARD) editingNote.value = event
+  else if (card) editing.value = { card, event }
+}
+function showVersion(index: number) {
+  version.value = index
+  switched.value = true
 }
 
 const finding = ref(false)
@@ -161,14 +171,17 @@ watch([flash, rows], async ([id]) => {
       <ol v-else class="timeline">
         <template v-for="row in rows" :key="row.event.id">
           <li v-if="row.gapHours" class="gap" aria-hidden="true">{{ tn('time.hours', row.gapHours) }}</li>
-          <li class="row" :class="{ flash: flash === row.event.id }" :data-event="row.event.id" :style="{ '--c': row.color }" role="button" tabindex="0" @click="edit(row)" @keydown.enter="edit(row)">
+          <li class="row" :class="{ flash: flash === row.event.id }" :data-event="row.event.id" :style="{ '--c': row.color }" role="button" tabindex="0" @click="edit(row.event)" @keydown.enter="edit(row.event)">
             <div class="time">
               {{ clock(row.event.eventAt * 1000) }}
               <span v-if="row.event.timeOffset < 0" class="late">{{ t('journal.backdated') }}</span>
             </div>
             <div class="rail">
               <span class="line" />
-              <span class="node">{{ row.quick ? '📝' : (row.card?.emoji ?? '•') }}</span>
+              <span class="node">
+                {{ row.quick ? '📝' : (row.card?.emoji ?? '•') }}
+                <CircleQuestionMark v-if="row.event.versions.length" class="versions" :size="17" :stroke-width="2.5" />
+              </span>
             </div>
             <div class="body">
               <div v-if="row.tags.length || row.chips.length" class="flex flex-wrap gap-1">
@@ -208,15 +221,26 @@ watch([flash, rows], async ([id]) => {
 
     <button class="fab" :aria-label="t('journal.finder')" @click="finding = true"><LayoutDashboard :size="24" /></button>
 
-    <JournalFinder v-if="finding" :day="day" @pick="pickDay" @jump="jump" @close="finding = false" />
+    <JournalFinder v-if="finding" :day="day" @pick="pickDay" @jump="jump" @resolve="edit" @close="finding = false" />
     <CheckinSheet
       v-if="editing"
-      :key="editing.event.id"
+      :key="`${editing.event.id}-${version}`"
       :card="{ id: editing.card.id, name: editing.card.name, emoji: editing.card.emoji }"
-      :event="editing.event"
+      :event="asVersion(editing.event, version)"
+      :versions="versionPick(editing.event, version)"
+      :instant="switched"
+      @version="showVersion"
       @close="editing = null"
     />
-    <QuickNoteSheet v-if="editingNote" :key="editingNote.id" :event="editingNote" @close="editingNote = null" />
+    <QuickNoteSheet
+      v-if="editingNote"
+      :key="`${editingNote.id}-${version}`"
+      :event="asVersion(editingNote, version)"
+      :versions="versionPick(editingNote, version)"
+      :instant="switched"
+      @version="showVersion"
+      @close="editingNote = null"
+    />
   </main>
 </template>
 
@@ -315,6 +339,14 @@ watch([flash, rows], async ([id]) => {
   border-radius: 50%;
   background: white;
   font-size: 15px;
+}
+.versions {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  border-radius: 50%;
+  background: white;
+  color: #f59e0b;
 }
 .body {
   min-width: 0;

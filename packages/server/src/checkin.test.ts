@@ -156,6 +156,40 @@ describe('editing an event', () => {
   })
 })
 
+describe('events in conflict', () => {
+  async function conflicted() {
+    const ctx = setup()
+    await ctx.send('POST', '/api/checkin', { cardId: 'practice', note: '早上', tags: ['鋼琴'], facts: { '鋼琴:分鐘': 20, mood_emoji: '🙂' } })
+    const event = allEvents(ctx.db)[0]!
+    const insert = ctx.db.prepare(
+      'INSERT INTO event_versions (event_id, device, edited_at, shown, deleted, event_at, note, tags, facts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    insert.run(event.id, '平板', 200, 0, 1, null, null, '[]', '{}')
+    insert.run(event.id, '手機', 100, 1, 0, event.eventAt, '早上', '["練習","鋼琴"]', '{"鋼琴:分鐘":20,"mood_emoji":"🙂"}')
+    return { ...ctx, event }
+  }
+  const conflicts = async (send: ReturnType<typeof setup>['send']) => (await send('GET', '/api/conflicts')).json() as Promise<{ id: number; versions: unknown[] }[]>
+
+  it('carry every version, the shown one first, and are listed until a save settles them', async () => {
+    const { db, send, event } = await conflicted()
+    expect((await conflicts(send)).map((e) => e.id)).toEqual([event.id])
+    expect(allEvents(db)[0]!.versions).toEqual([
+      expect.objectContaining({ device: '手機', shown: true, deleted: false, note: '早上', tags: ['練習', '鋼琴'], facts: { '鋼琴:分鐘': 20, mood_emoji: '🙂' } }),
+      expect.objectContaining({ device: '平板', shown: false, deleted: true, eventAt: null }),
+    ])
+    await send('PUT', `/api/events/${event.id}`, { note: '早上', tags: ['鋼琴'], eventAt: event.eventAt, facts: { '鋼琴:分鐘': 25, mood_emoji: '🙂' } })
+    expect(await conflicts(send)).toEqual([])
+    expect(allEvents(db)[0]!.versions).toEqual([])
+  })
+
+  it('go away with the event when it is deleted', async () => {
+    const { db, send, event } = await conflicted()
+    await send('DELETE', `/api/events/${event.id}`)
+    expect(await conflicts(send)).toEqual([])
+    expect(db.prepare('SELECT COUNT(*) AS n FROM event_versions').get()).toEqual({ n: 0 })
+  })
+})
+
 describe('attachments', () => {
   const attachmentSchema = z.object({ id: z.string(), name: z.string(), type: z.string(), size: z.number(), thumb: z.boolean(), width: z.number().nullable(), height: z.number().nullable() })
   async function upload(app: ReturnType<typeof setup>['app'], name: string, type: string, body: string, thumb?: string, size?: { width: number; height: number }) {

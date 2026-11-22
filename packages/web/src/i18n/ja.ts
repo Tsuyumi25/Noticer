@@ -287,6 +287,8 @@ export default {
   'finder.results.one': '{n} 件',
   'finder.results.other': '{n} 件',
   'finder.noMedia': 'まだ写真や動画がありません',
+  'finder.conflicts': '競合',
+  'conflict.deleted': '削除済み',
   'attach.unreadable': 'このファイルは表示できません',
   'attach.zoom': 'ズーム',
   'attach.previous': '前へ',

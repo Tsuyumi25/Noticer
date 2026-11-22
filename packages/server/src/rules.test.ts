@@ -7,7 +7,7 @@ const H = 3600
 const local = (d: number, h = 12, m = 0) => new Date(2026, 5, d, h, m).getTime() / 1000
 let nextId = 1
 const ev = (eventAt: number, tags: string[], facts: EventRecord['facts'] = {}): EventRecord => ({
-  id: nextId++, cardId: 'x', eventAt, timeOffset: 0, note: null, tags, facts, attachments: [],
+  id: nextId++, cardId: 'x', eventAt, timeOffset: 0, note: null, tags, facts, attachments: [], versions: [],
 })
 const all: Find = { match: 'all', blocks: [] }
 type Row = Find['blocks'][number]['layers'][number][number]
