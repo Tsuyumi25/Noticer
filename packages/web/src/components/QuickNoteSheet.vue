@@ -139,6 +139,7 @@ const { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEn
   canDrag: () => !confirming.value && !deleting.value && adding.value === null,
   instant: props.instant,
   centered,
+  onLeft: () => emit('close'),
 })
 
 function requestClose() {

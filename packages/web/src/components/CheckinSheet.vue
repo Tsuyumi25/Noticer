@@ -196,6 +196,7 @@ const { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEn
     canDrag: (e) => !confirming.value && !deleting.value && !(editing.value && (e.target as Element).closest('[data-tag]')),
     instant: props.instant,
     centered,
+    onLeft: () => emit('close'),
   })
 
 function requestClose() {

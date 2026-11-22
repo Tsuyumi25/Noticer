@@ -12,13 +12,15 @@ interface SheetDragOptions {
   canDrag?: (e: TouchEvent) => boolean
   instant?: boolean
   centered?: boolean
+  onLeft?: () => void
 }
 
 /** A full-screen sheet that slides in, follows a downward pull, and slides away when asked to leave. */
-export function useSheetDrag({ onRequestClose, canDrag, instant = false, centered = false }: SheetDragOptions) {
+export function useSheetDrag({ onRequestClose, canDrag, instant = false, centered = false, onLeft }: SheetDragOptions) {
   const sheet = ref<HTMLElement | null>(null)
+  const still = instant || centered
   /** How far the sheet is pushed below full screen, in px; 0 means full screen. */
-  const offset = ref(instant ? 0 : window.innerHeight)
+  const offset = ref(still ? 0 : window.innerHeight)
   const animated = ref(true)
   const leaving = ref(false)
 
@@ -34,6 +36,7 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false, centere
   const backdrop = computed(() => 0.4 * Math.max(0, 1 - offset.value / window.innerHeight))
 
   function leave() {
+    if (centered) return onLeft?.()
     animated.value = true
     leaving.value = true
     offset.value = window.innerHeight
@@ -105,7 +108,7 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false, centere
   onMounted(() => {
     if (open++ === 0) document.documentElement.style.overflow = 'hidden'
     // Paint the off-screen position first so the slide-in animates.
-    if (!instant) requestAnimationFrame(() => requestAnimationFrame(() => (offset.value = 0)))
+    if (!still) requestAnimationFrame(() => requestAnimationFrame(() => (offset.value = 0)))
   })
   onUnmounted(() => {
     if (--open === 0) document.documentElement.style.overflow = ''
