@@ -46,7 +46,7 @@ export function cardModel(card: Pick<CardConfig, 'id' | 'name' | 'root' | 'emoji
     progress: result.progress,
     nowHours: result.mode !== null && result.lastAt !== null ? (now - result.lastAt) / 3600 : null,
     maxHours: result.maxHours,
-    strip: evaluateDays(card.rules, card.root, events, now),
+    strip: evaluateDays(card.rules, card.root, events, now, 6),
   }
 }
 

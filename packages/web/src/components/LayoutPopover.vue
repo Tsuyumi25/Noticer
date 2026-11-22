@@ -4,6 +4,7 @@ import type { Config, Layout } from 'server/config'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '../api.ts'
 import { t, type MessageKey } from '../i18n/index.ts'
+import StripOptions from './StripOptions.vue'
 
 const props = defineProps<{ layout: Layout }>()
 const emit = defineEmits<{ close: [] }>()
@@ -73,14 +74,19 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="root" role="dialog" :aria-label="t('layout.title')" class="absolute top-14 right-0 z-20 w-80 rounded-2xl bg-white p-4 shadow-xl">
+  <div
+    ref="root"
+    role="dialog"
+    :aria-label="t('layout.title')"
+    class="absolute top-14 right-0 z-20 max-h-[calc(100%-3.5rem)] w-80 overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-xl"
+  >
     <template v-for="(p, i) in picks" :key="p.field">
       <p class="mb-2 text-xs font-semibold text-zinc-500" :class="{ 'mt-4': i > 0 }">{{ t(p.label) }}</p>
       <div class="flex rounded-xl bg-zinc-100 p-1">
         <button
           v-for="o in p.options"
           :key="o.value"
-          class="h-10 flex-1 rounded-lg text-sm"
+          class="h-11 flex-1 rounded-lg text-sm"
           :class="layout[p.field] === o.value ? 'bg-white font-semibold text-zinc-900 shadow-sm' : 'text-zinc-600'"
           @click="choose(p.field, o.value)"
         >
@@ -104,5 +110,7 @@ onUnmounted(() => {
         @change="save.mutate({ ...layout, [s.key]: Number(($event.target as HTMLInputElement).value) })"
       />
     </div>
+    <p class="mt-5 mb-3 border-t border-zinc-100 pt-4 text-sm font-semibold text-zinc-700">{{ t('strip.title') }}</p>
+    <StripOptions />
   </div>
 </template>

@@ -129,6 +129,14 @@ export const layoutSchema = z.object({
 
 const defaultLayout: z.infer<typeof layoutSchema> = { arrangement: 'stack', cardScale: 1, maxScale: 1.35, align: 'center' }
 
+export const stripSchema = z.object({
+  look: z.enum(['blend', 'thin', 'cells']),
+  weight: z.enum(['thick', 'thin']),
+  side: z.enum(['left', 'right']),
+})
+
+const defaultStrip: z.infer<typeof stripSchema> = { look: 'blend', weight: 'thick', side: 'right' }
+
 export const configSchema = z
   .object({
     cards: z.array(cardSchema),
@@ -137,6 +145,7 @@ export const configSchema = z
     /** What a tag is, in the user's words; it follows the tag under every root. */
     tagNotes: z.record(z.string(), z.string().trim().min(1)).default({}),
     layout: layoutSchema.default(defaultLayout),
+    strip: stripSchema.default(defaultStrip),
   })
   .superRefine((config, ctx) => {
     for (const card of config.cards) {
@@ -172,8 +181,9 @@ export type ValueSpec = z.infer<typeof valueSpecSchema>
 export type TagGroup = z.infer<typeof tagGroupsSchema>[number]
 export type RuleStatus = z.infer<typeof statusSchema>
 export type Layout = z.infer<typeof layoutSchema>
+export type StripStyle = z.infer<typeof stripSchema>
 
-export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {}, tagNotes: {}, layout: defaultLayout }
+export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {}, tagNotes: {}, layout: defaultLayout, strip: defaultStrip }
 
 /** The file as stored: card entries keep fields this app does not model yet (memo…). */
 export type RawConfig = {

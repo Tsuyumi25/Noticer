@@ -477,3 +477,23 @@ describe('layout', () => {
     expect(store.read().layout).toEqual(saved)
   })
 })
+
+describe('strip style', () => {
+  it('starts as thick colour blocks with today on the right and keeps the look, border and side it is given', async () => {
+    const { store, send } = setup()
+    expect(store.read().strip).toEqual({ look: 'blend', weight: 'thick', side: 'right' })
+    const strip = { look: 'cells', weight: 'thin', side: 'left' }
+    expect((await send('PUT', '/api/strip', strip)).status).toBe(204)
+    expect(store.read().strip).toEqual(strip)
+  })
+
+  it('refuses an unknown look, border or side, and leaves the saved style alone', async () => {
+    const { store, send } = setup()
+    const saved = { look: 'thin', weight: 'thick', side: 'left' }
+    await send('PUT', '/api/strip', saved)
+    for (const bad of [{ look: 'gradient' }, { weight: 'mixed' }, { side: 'center' }]) {
+      expect((await send('PUT', '/api/strip', { ...saved, ...bad })).status).toBe(400)
+    }
+    expect(store.read().strip).toEqual(saved)
+  })
+})

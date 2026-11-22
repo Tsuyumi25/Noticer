@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
-import { computed, ref } from 'vue'
+import { Palette, Plus } from 'lucide-vue-next'
+import { computed, nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CardBoard from '../components/CardBoard.vue'
+import CardBuilderSheet from '../components/CardBuilderSheet.vue'
 import CheckinSheet, { type SheetCard } from '../components/CheckinSheet.vue'
 import EventEditor from '../components/EventEditor.vue'
 import RecentPanel from '../components/RecentPanel.vue'
 import ReviewSheet from '../components/ReviewSheet.vue'
 import SleepCard from '../components/SleepCard.vue'
+import StyleSheet from '../components/StyleSheet.vue'
 import WaterCard from '../components/WaterCard.vue'
 import { t } from '../i18n/index.ts'
 import { vLongPress } from '../longPress.ts'
@@ -29,6 +32,21 @@ function closeReview() {
   if (window.history.state?.back) router.back()
   else router.replace({ query: {} })
 }
+
+const building = ref(false)
+const styling = ref(false)
+const styleRoom = ref(0)
+const home = ref<HTMLElement | null>(null)
+async function openStyle() {
+  styling.value = true
+  await nextTick()
+  const card = home.value?.querySelector('.strip')?.closest('.card')
+  if (card) window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - 12, behavior: 'smooth' })
+}
+function closeStyle() {
+  styling.value = false
+  styleRoom.value = 0
+}
 </script>
 
 <template>
@@ -41,7 +59,12 @@ function closeReview() {
     <RecentPanel class="min-w-0 flex-[3]" @edit="editing = $event" />
   </div>
   <div v-else class="dashboard min-h-dvh">
-  <main class="mx-auto flex max-w-2xl flex-col gap-3 p-3">
+  <main
+    ref="home"
+    class="mx-auto flex max-w-2xl flex-col gap-3 p-3"
+    :class="{ 'pointer-events-none': styling }"
+    :style="styleRoom ? { paddingBottom: `${styleRoom}px` } : undefined"
+  >
     <p v-if="isPending" class="p-6 text-center text-white/80">{{ t('common.loading') }}</p>
     <p v-else-if="isError" class="p-6 text-center text-white">{{ t('common.loadFailed') }}</p>
     <template v-else-if="data">
@@ -75,11 +98,21 @@ function closeReview() {
           />
         </div>
       </template>
+      <div class="mt-1 grid grid-cols-2 gap-2 rounded-2xl border-2 border-indigo-300 bg-white/95 p-2 shadow-md">
+        <button class="flex h-20 flex-col items-center justify-center gap-1 rounded-xl bg-indigo-200 text-sm font-semibold text-indigo-800" @click="building = true">
+          <Plus :size="22" />{{ t('settings.addCard') }}
+        </button>
+        <button class="flex h-20 flex-col items-center justify-center gap-1 rounded-xl bg-indigo-200 text-sm font-semibold text-indigo-800" @click="openStyle">
+          <Palette :size="22" />{{ t('home.style') }}
+        </button>
+      </div>
     </template>
   </main>
   </div>
   <CheckinSheet v-if="opened" :key="opened.name" :card="opened" @close="opened = null" />
   <EventEditor v-if="editing" :key="editing.id" :event="editing" @close="editing = null" />
+  <CardBuilderSheet v-if="building" @close="building = false" />
+  <StyleSheet v-if="styling" @height="styleRoom = $event" @close="closeStyle" />
   <ReviewSheet
     v-if="reviewing"
     :key="reviewing"
