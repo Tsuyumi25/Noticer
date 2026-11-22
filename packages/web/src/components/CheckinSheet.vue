@@ -56,7 +56,8 @@ const timePopup = ref(false)
 const timeLabel = computed(() => {
   if (happenedAt.value === null) return t('time.now')
   const now = Date.now()
-  return `${relativeTime(happenedAt.value, now)} · ${absoluteTime(happenedAt.value, now)}`
+  const at = absoluteTime(happenedAt.value, now)
+  return isDesktop.value ? `${relativeTime(happenedAt.value, now)} · ${at}` : at
 })
 
 const { data: inputs } = useQuery({
