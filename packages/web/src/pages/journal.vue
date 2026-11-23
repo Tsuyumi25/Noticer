@@ -112,6 +112,7 @@ const rows = computed(() =>
   }),
 )
 
+const viewerArea = ref<HTMLElement | null>(null)
 const editing = ref<ConflictEvent | null>(null)
 const editingDocked = ref(false)
 const editor = ref<InstanceType<typeof EventEditor> | null>(null)
@@ -156,12 +157,12 @@ watch([flash, rows], async ([id]) => {
 
 <template>
   <div :class="isDesktop ? 'grid h-[calc(100dvh-56px)] grid-cols-[320px_minmax(0,1fr)_400px] bg-zinc-100' : 'contents'">
-    <aside v-if="isDesktop" class="min-h-0 border-r border-zinc-200">
-      <JournalFinder docked :day="day" @pick="pickDay" @jump="jump" @resolve="openEvent" />
+    <aside v-if="isDesktop" class="col-start-1 row-start-1 min-h-0 border-r border-zinc-200">
+      <JournalFinder docked :day="day" :viewer-area="viewerArea" @pick="pickDay" @jump="jump" @resolve="openEvent" />
     </aside>
     <main
       class="flex flex-col overflow-x-clip bg-zinc-100"
-      :class="isDesktop ? 'min-h-0 overflow-y-auto' : 'mx-auto min-h-dvh max-w-2xl'"
+      :class="isDesktop ? 'col-start-2 row-start-1 min-h-0 overflow-y-auto' : 'mx-auto min-h-dvh max-w-2xl'"
     >
       <header class="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white/90 px-1 py-1.5 backdrop-blur">
         <button class="nav" :aria-label="t('journal.prevDay')" @click="goTo(shiftDay(-1))"><ChevronLeft :size="22" /></button>
@@ -212,7 +213,7 @@ watch([flash, rows], async ([id]) => {
                     class="attachment"
                     :class="{ file: !isVisual(a) }"
                     :aria-label="a.name"
-                    @click.stop="openViewer(row.event.attachments, i)"
+                    @click.stop="openViewer(row.event.attachments, i, { within: viewerArea })"
                   >
                     <img v-if="isVisual(a)" :src="previewUrl(a)" alt="" loading="lazy" class="size-full rounded-lg object-cover" />
                     <template v-else><AttachmentIcon :attachment="a" :size="16" /><span class="truncate">{{ a.name }}</span></template>
@@ -231,10 +232,11 @@ watch([flash, rows], async ([id]) => {
       </template>
       <EventEditor v-if="editing && !editingDocked" :key="editing.id" :event="editing" @close="closeEditor" />
     </main>
-    <aside v-if="isDesktop" class="relative min-h-0 border-l border-zinc-200 bg-white">
+    <aside v-if="isDesktop" class="relative col-start-3 row-start-1 min-h-0 border-l border-zinc-200 bg-white">
       <EventEditor v-if="editing && editingDocked" ref="editor" :key="editing.id" :event="editing" docked @close="closeEditor" />
       <p v-else class="p-8 text-center text-sm text-zinc-400">{{ t('journal.pickHint') }}</p>
     </aside>
+    <div v-if="isDesktop" ref="viewerArea" class="pointer-events-none relative z-20 col-[2/4] row-start-1" />
   </div>
 </template>
 

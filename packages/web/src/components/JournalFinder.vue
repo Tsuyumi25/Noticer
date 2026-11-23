@@ -16,7 +16,7 @@ import JournalCalendar from './JournalCalendar.vue'
 import type { ConflictEvent } from '../versions.ts'
 
 /** Finding a picture, a day or an entry: the gallery opens first; the calendar, search and any conflicts sit beside it, a swipe away. */
-const props = defineProps<{ day: Date; docked?: boolean }>()
+const props = defineProps<{ day: Date; docked?: boolean; viewerArea?: HTMLElement | null }>()
 const emit = defineEmits<{ pick: [day: string]; jump: [eventId: number, eventAt: number]; resolve: [event: ConflictEvent]; close: [] }>()
 
 type Tab = 'calendar' | 'search' | 'gallery' | 'conflicts'
@@ -136,6 +136,7 @@ const months = computed(() => {
 function view(index: number) {
   const list = media.value ?? []
   void openViewer(list, index, {
+    within: props.viewerArea,
     showInJournal: (at) => {
       const item = list[at]
       if (item) jump(item.eventId, item.eventAt)

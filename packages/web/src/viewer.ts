@@ -39,11 +39,15 @@ async function slideOf(a: Attachment): Promise<SlideData> {
 interface ViewerOptions {
   /** Offers a button that closes the viewer and shows the current attachment's entry in the journal. */
   showInJournal?: (index: number) => void
+  within?: HTMLElement | null
 }
 
 /** Opens attachments over the whole screen, at `index`: swipe between them, pinch to zoom, drag down to close. */
-export async function openViewer(attachments: Attachment[], index: number, { showInJournal }: ViewerOptions = {}) {
+export async function openViewer(attachments: Attachment[], index: number, { showInJournal, within }: ViewerOptions = {}) {
   const pswp = new PhotoSwipe({
+    ...(within
+      ? { appendToEl: within, mainClass: 'pswp--within', getViewportSizeFn: () => ({ x: within.clientWidth, y: within.clientHeight }) }
+      : {}),
     dataSource: await Promise.all(attachments.map(slideOf)),
     index,
     bgOpacity: 1,
