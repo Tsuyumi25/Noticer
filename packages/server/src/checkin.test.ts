@@ -459,20 +459,21 @@ describe('card tags', () => {
 })
 
 describe('layout', () => {
-  it('starts as a centred stack at normal size and keeps the arrangement, card size, largest step and alignment it is given', async () => {
+  it('starts as a centred stack at normal size with nothing pinned, and keeps the arrangement, sizes, alignment and pins it is given', async () => {
     const { store, send } = setup()
-    expect(store.read().layout).toEqual({ arrangement: 'stack', cardScale: 1, maxScale: 1.35, align: 'center' })
-    const layout = { arrangement: 'sections', cardScale: 1.2, maxScale: 1.5, align: 'left' }
+    expect(store.read().layout).toEqual({ arrangement: 'stack', cardScale: 1, maxScale: 1.35, align: 'center', pins: {} })
+    const layout = { arrangement: 'sections', cardScale: 1.2, maxScale: 1.5, align: 'left', pins: { practice: { side: 'right', fx: 0.25, fy: 0 } } }
     expect((await send('PUT', '/api/layout', layout)).status).toBe(204)
     expect(store.read().layout).toEqual(layout)
   })
 
-  it('refuses an out-of-range size or an unknown alignment, and leaves the saved layout alone', async () => {
+  it('refuses an out-of-range size, an unknown alignment or a pin off the board, and leaves the saved layout alone', async () => {
     const { store, send } = setup()
-    const saved = { arrangement: 'stack', cardScale: 1, maxScale: 1.2, align: 'right' }
+    const saved = { arrangement: 'stack', cardScale: 1, maxScale: 1.2, align: 'right', pins: {} }
     await send('PUT', '/api/layout', saved)
-    for (const bad of [{ cardScale: 0.7 }, { cardScale: 1.7 }, { maxScale: 2 }, { maxScale: 0.9 }, { align: 'top' }]) {
-      expect((await send('PUT', '/api/layout', { ...saved, ...bad })).status).toBe(400)
+    const bad = [{ cardScale: 0.7 }, { cardScale: 1.7 }, { maxScale: 2 }, { maxScale: 0.9 }, { align: 'top' }, { pins: { practice: { side: 'left', fx: 0, fy: 1.5 } } }]
+    for (const change of bad) {
+      expect((await send('PUT', '/api/layout', { ...saved, ...change })).status).toBe(400)
     }
     expect(store.read().layout).toEqual(saved)
   })

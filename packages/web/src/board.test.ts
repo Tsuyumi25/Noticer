@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fillRows, fitScale, pyramidRows, sizeStep, stepScale } from './board.ts'
+import { fitScale, pinOf, pinRect, placeStack, pyramidRows, sizeStep, stepScale, type GridItem, type Rect } from './board.ts'
 
 describe('pyramidRows', () => {
   it('puts every card in a row that never holds more than the row below it', () => {
@@ -37,41 +37,74 @@ describe('sizeStep', () => {
   })
 })
 
-describe('fillRows', () => {
-  const widths = [250, 250, 230, ...Array.from({ length: 14 }, () => 186), 382]
+describe('placeStack', () => {
+  const n = 3
+  const card = (id: string, step: GridItem['step'] = 0): GridItem => {
+    const span = Math.round(n * stepScale(step, 2))
+    return { id, w: span, h: span, step }
+  }
+  const items = [card('u1', 3), card('u2', 2), card('u3', 1), ...Array.from({ length: 9 }, (_, i) => card(`c${i}`))]
+  const overlap = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+  const sane = (out: Record<string, Rect>, cols: number, rows: number) => {
+    const rects = Object.values(out)
+    rects.forEach((r, i) => {
+      expect(r.x >= 0 && r.y >= 0 && r.x + r.w <= cols && r.y + r.h <= rows).toBe(true)
+      rects.slice(i + 1).forEach((o) => expect(overlap(r, o)).toBe(false))
+    })
+  }
 
-  it('keeps the pyramid counts while the rows fit, so the biggest cards stay at the tip', () => {
-    const counts = pyramidRows(widths.length, 6, 99)
-    expect(fillRows(widths, counts, 1400, 10)).toEqual(counts)
+  it('stacks every card on the floor, the calm ones below every urgent one', () => {
+    const out = placeStack(items, {}, { cols: 30, rows: 30, n, align: 'center' })!
+    sane(out, 30, 30)
+    expect(Object.keys(out)).toHaveLength(items.length)
+    expect(Math.max(...Object.values(out).map((r) => r.y + r.h))).toBe(30)
+    const calmTop = Math.min(...items.filter((it) => it.step === 0).map((it) => out[it.id]!.y))
+    for (const it of items.filter((it) => it.step > 0)) expect(out[it.id]!.y + out[it.id]!.h).toBeLessThanOrEqual(calmTop)
+    expect(out.u1!.y).toBeLessThan(out.u3!.y)
   })
 
-  it('moves cards down instead of letting a row run past the width, keeping their order', () => {
-    const rows = fillRows(widths, [1, 2, 3, 12], 700, 10)
-    let next = 0
-    for (const n of rows) {
-      const row = widths.slice(next, (next += n))
-      expect(row.length === 1 || row.reduce((a, b) => a + b, 0) + (row.length - 1) * 10 <= 700.5).toBe(true)
-    }
-    expect(next).toBe(widths.length)
-    expect(rows.slice(0, 2)).toEqual([1, 2])
+  it('slides the whole stack to the chosen side', () => {
+    const left = placeStack(items, {}, { cols: 40, rows: 30, n, align: 'left' })!
+    const right = placeStack(items, {}, { cols: 40, rows: 30, n, align: 'right' })!
+    expect(Math.min(...Object.values(left).map((r) => r.x))).toBe(0)
+    expect(Math.max(...Object.values(right).map((r) => r.x + r.w))).toBe(40)
+  })
+
+  it('keeps a pinned card exactly where it was put and lays the others around it', () => {
+    const pin = { x: 12, y: 24, w: 6, h: 3 }
+    const out = placeStack([{ id: 'sleep', w: 6, h: 3, step: 0 }, ...items], { sleep: pin }, { cols: 30, rows: 30, n, align: 'center' })!
+    expect(out.sleep).toEqual(pin)
+    sane(out, 30, 30)
+    expect(Object.keys(out)).toHaveLength(items.length + 1)
+  })
+
+  it('gives up when the cards do not fit, or when pinned cards collide or fall off the grid', () => {
+    expect(placeStack(items, {}, { cols: 9, rows: 6, n, align: 'center' })).toBeNull()
+    const a = { x: 0, y: 0, w: 3, h: 3 }
+    expect(placeStack(items, { c0: a, c1: { ...a, x: 2 } }, { cols: 30, rows: 30, n, align: 'center' })).toBeNull()
+    expect(placeStack(items, { c0: { ...a, x: 28 } }, { cols: 30, rows: 30, n, align: 'center' })).toBeNull()
   })
 })
 
-describe('two piles', () => {
-  const starts = (rows: number[]) => rows.reduce<number[]>((acc, n) => [...acc, (acc.at(-1) ?? 0) + n], [])
-
-  it('never puts an urgent card in the same row as a calm one', () => {
-    for (const urgent of [1, 4, 7, 11]) {
-      const rows = pyramidRows(18, 6, 99, urgent)
-      expect(starts(rows)).toContain(urgent)
-      expect(rows.reduce((a, b) => a + b, 0)).toBe(18)
+describe('pins', () => {
+  it('come back exactly where they were put on the same grid', () => {
+    for (const side of ['left', 'center', 'right'] as const) {
+      for (const rect of [{ x: 7, y: 20, w: 3, h: 3 }, { x: 0, y: 0, w: 6, h: 3 }, { x: 27, y: 27, w: 3, h: 3 }]) {
+        expect(pinRect(pinOf(rect, side, 30, 30), rect.w, rect.h, 30, 30)).toEqual(rect)
+      }
     }
   })
 
-  it('keeps the piles apart even when a crowded urgent row pushes a card down', () => {
-    const widths = [400, 400, 400, 186, 186, 186, 186, 186]
-    const rows = fillRows(widths, [2, 3, 3], 900, 10, 3)
-    expect(starts(rows)).toContain(3)
+  it('keep their place on the board when the grid changes, so a card pinned at the top never forces the others to shrink', () => {
+    const top = pinOf({ x: 0, y: 0, w: 6, h: 3 }, 'left', 30, 20)
+    for (const [cols, rows] of [[12, 8], [30, 20], [60, 50]] as const) {
+      const rect = pinRect(top, 6, 3, cols, rows)
+      expect(rect).toMatchObject({ x: 0, y: 0 })
+    }
+    const corner = pinOf({ x: 27, y: 17, w: 3, h: 3 }, 'right', 30, 20)
+    expect(pinRect(corner, 3, 3, 40, 26)).toEqual({ x: 37, y: 23, w: 3, h: 3 })
+    const middle = pinRect(pinOf({ x: 12, y: 8, w: 6, h: 3 }, 'center', 30, 20), 6, 3, 60, 40)
+    expect(middle.x).toBe(27)
   })
 })
 

@@ -125,9 +125,10 @@ export const layoutSchema = z.object({
   cardScale: z.number().min(0.8).max(1.6).default(1),
   maxScale: z.number().min(1).max(1.6),
   align: z.enum(['left', 'center', 'right']).default('center'),
+  pins: z.record(z.string(), z.object({ side: z.enum(['left', 'center', 'right']), fx: z.number().min(-1).max(1), fy: z.number().min(0).max(1) })).default({}),
 })
 
-const defaultLayout: z.infer<typeof layoutSchema> = { arrangement: 'stack', cardScale: 1, maxScale: 1.35, align: 'center' }
+const defaultLayout: z.infer<typeof layoutSchema> = { arrangement: 'stack', cardScale: 1, maxScale: 1.35, align: 'center', pins: {} }
 
 export const stripSchema = z.object({
   look: z.enum(['blend', 'thin', 'cells']),

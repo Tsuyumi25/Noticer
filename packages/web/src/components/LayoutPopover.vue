@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { useMutation, useQueryClient } from '@tanstack/vue-query'
-import type { Config, Layout } from 'server/config'
+import type { Layout } from 'server/config'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { api } from '../api.ts'
 import { t, type MessageKey } from '../i18n/index.ts'
+import { useLayoutSave } from '../layoutSave.ts'
 import StripOptions from './StripOptions.vue'
 
 const props = defineProps<{ layout: Layout }>()
@@ -40,20 +39,10 @@ const sliders = computed(() => [
   ...(props.layout.arrangement === 'stack' ? [{ key: 'maxScale' as Scale, label: 'layout.maxScale' as MessageKey, min: 1 }] : []),
 ])
 
-const queryClient = useQueryClient()
-const show = (next: Layout) => queryClient.setQueryData<Config>(['config'], (config) => config && { ...config, layout: next })
-const save = useMutation({
-  mutationFn: async (next: Layout) => {
-    const res = await api.layout.$put({ json: next })
-    if (!res.ok) throw new Error(`layout: ${res.status}`)
-  },
-  onError: () => queryClient.invalidateQueries({ queryKey: ['config'] }),
-})
+const { show, save } = useLayoutSave()
 
 function choose(field: Choice['field'], value: string) {
-  const next = { ...props.layout, [field]: value } as Layout
-  show(next)
-  save.mutate(next)
+  save({ ...props.layout, [field]: value } as Layout)
 }
 
 const root = ref<HTMLElement | null>(null)
@@ -107,7 +96,7 @@ onUnmounted(() => {
         class="h-11 w-full accent-indigo-600"
         :value="layout[s.key]"
         @input="show({ ...layout, [s.key]: Number(($event.target as HTMLInputElement).value) })"
-        @change="save.mutate({ ...layout, [s.key]: Number(($event.target as HTMLInputElement).value) })"
+        @change="save({ ...layout, [s.key]: Number(($event.target as HTMLInputElement).value) })"
       />
     </div>
     <p class="mt-5 mb-3 border-t border-zinc-100 pt-4 text-sm font-semibold text-zinc-700">{{ t('strip.title') }}</p>
