@@ -151,6 +151,7 @@ export default {
   'journal.backdated': '補',
   'journal.calendar': '月曆',
   'journal.finder': '圖庫、月曆與搜尋',
+  'journal.pickHint': '點一筆紀錄，在這裡查看與編輯',
   'journal.prevMonth': '上個月',
   'journal.nextMonth': '下個月',
 

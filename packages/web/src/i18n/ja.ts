@@ -152,6 +152,7 @@ export default {
   'journal.backdated': '後記',
   'journal.calendar': 'カレンダー',
   'journal.finder': 'ギャラリー・カレンダー・検索',
+  'journal.pickHint': '記録を選ぶと、ここで確認・編集できます',
   'journal.prevMonth': '前の月',
   'journal.nextMonth': '次の月',
 

@@ -12,13 +12,15 @@ interface SheetDragOptions {
   canDrag?: (e: TouchEvent) => boolean
   instant?: boolean
   centered?: boolean
+  docked?: boolean
   onLeft?: () => void
 }
 
 /** A full-screen sheet that slides in, follows a downward pull, and slides away when asked to leave. */
-export function useSheetDrag({ onRequestClose, canDrag, instant = false, centered = false, onLeft }: SheetDragOptions) {
+export function useSheetDrag({ onRequestClose, canDrag, instant = false, centered = false, docked = false, onLeft }: SheetDragOptions) {
   const sheet = ref<HTMLElement | null>(null)
-  const still = instant || centered
+  const fixed = centered || docked
+  const still = instant || fixed
   /** How far the sheet is pushed below full screen, in px; 0 means full screen. */
   const offset = ref(still ? 0 : window.innerHeight)
   const animated = ref(true)
@@ -26,7 +28,7 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false, centere
 
   // Full screen has square corners; they round only while the sheet is off its resting place.
   const sheetStyle = computed(() => {
-    if (centered) {
+    if (fixed) {
       const lift = Math.min(40, offset.value)
       return { transform: `translateY(${lift}px)`, opacity: 1 - lift / 40 }
     }
@@ -36,7 +38,7 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false, centere
   const backdrop = computed(() => 0.4 * Math.max(0, 1 - offset.value / window.innerHeight))
 
   function leave() {
-    if (centered) return onLeft?.()
+    if (fixed) return onLeft?.()
     animated.value = true
     leaving.value = true
     offset.value = window.innerHeight
@@ -66,7 +68,7 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false, centere
 
   function onTouchStart(e: TouchEvent) {
     const touch = e.touches[0]
-    if (centered || leaving.value || !touch || e.touches.length > 1) return
+    if (fixed || leaving.value || !touch || e.touches.length > 1) return
     dragging = (canDrag?.(e) ?? true) && atTop(e.target)
     judged = false
     startX = touch.clientX
@@ -106,12 +108,12 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false, centere
   }
 
   onMounted(() => {
-    if (open++ === 0) document.documentElement.style.overflow = 'hidden'
+    if (!docked && open++ === 0) document.documentElement.style.overflow = 'hidden'
     // Paint the off-screen position first so the slide-in animates.
     if (!still) requestAnimationFrame(() => requestAnimationFrame(() => (offset.value = 0)))
   })
   onUnmounted(() => {
-    if (--open === 0) document.documentElement.style.overflow = ''
+    if (!docked && --open === 0) document.documentElement.style.overflow = ''
   })
 
   return { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd }

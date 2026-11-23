@@ -18,6 +18,7 @@ import { usePageSwipe } from '../pageSwipe.ts'
 import { t, tn } from '../i18n/index.ts'
 import { cardColor, tagColors } from '../tagColors.ts'
 import { clock, date, dayKey, parseDayKey } from '../time.ts'
+import { isDesktop } from '../viewport.ts'
 
 const GAP_SECONDS = 2 * 3600
 
@@ -112,6 +113,25 @@ const rows = computed(() =>
 )
 
 const editing = ref<ConflictEvent | null>(null)
+const editingDocked = ref(false)
+const editor = ref<InstanceType<typeof EventEditor> | null>(null)
+const next = ref<ConflictEvent | null>(null)
+function openEvent(event: ConflictEvent) {
+  if (editing.value?.id === event.id) return
+  if (editing.value && editingDocked.value && editor.value?.dirty) {
+    next.value = event
+    editor.value.requestClose()
+    return
+  }
+  editingDocked.value = isDesktop.value
+  editing.value = event
+}
+function closeEditor() {
+  editing.value = null
+  const waiting = next.value
+  next.value = null
+  if (waiting) openEvent(waiting)
+}
 
 const finding = ref(false)
 function pickDay(key: string) {
@@ -135,74 +155,87 @@ watch([flash, rows], async ([id]) => {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-dvh max-w-2xl flex-col overflow-x-clip bg-zinc-100">
-    <header class="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white/90 px-1 py-1.5 backdrop-blur">
-      <button class="nav" :aria-label="t('journal.prevDay')" @click="goTo(shiftDay(-1))"><ChevronLeft :size="22" /></button>
-      <h1 class="text-[17px] font-semibold">{{ date(day.getTime()) }}</h1>
-      <button class="nav" :aria-label="t('journal.nextDay')" :disabled="isToday" @click="goTo(shiftDay(1))"><ChevronRight :size="22" /></button>
-    </header>
+  <div :class="isDesktop ? 'grid h-[calc(100dvh-56px)] grid-cols-[320px_minmax(0,1fr)_400px] bg-zinc-100' : 'contents'">
+    <aside v-if="isDesktop" class="min-h-0 border-r border-zinc-200">
+      <JournalFinder docked :day="day" @pick="pickDay" @jump="jump" @resolve="openEvent" />
+    </aside>
+    <main
+      class="flex flex-col overflow-x-clip bg-zinc-100"
+      :class="isDesktop ? 'min-h-0 overflow-y-auto' : 'mx-auto min-h-dvh max-w-2xl'"
+    >
+      <header class="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white/90 px-1 py-1.5 backdrop-blur">
+        <button class="nav" :aria-label="t('journal.prevDay')" @click="goTo(shiftDay(-1))"><ChevronLeft :size="22" /></button>
+        <h1 class="text-[17px] font-semibold">{{ date(day.getTime()) }}</h1>
+        <button class="nav" :aria-label="t('journal.nextDay')" :disabled="isToday" @click="goTo(shiftDay(1))"><ChevronRight :size="22" /></button>
+      </header>
 
-    <div ref="pane" class="pane" :style="swipe.style.value">
-      <p v-if="isPending" class="p-6 text-center text-zinc-400">{{ t('common.loading') }}</p>
-      <p v-else-if="isError" class="p-6 text-center text-red-600">{{ t('common.loadFailed') }}</p>
-      <p v-else-if="!rows.length" class="p-6 text-center text-zinc-400">{{ t('journal.empty') }}</p>
+      <div ref="pane" class="pane" :style="swipe.style.value">
+        <p v-if="isPending" class="p-6 text-center text-zinc-400">{{ t('common.loading') }}</p>
+        <p v-else-if="isError" class="p-6 text-center text-red-600">{{ t('common.loadFailed') }}</p>
+        <p v-else-if="!rows.length" class="p-6 text-center text-zinc-400">{{ t('journal.empty') }}</p>
 
-      <ol v-else class="timeline">
-        <template v-for="row in rows" :key="row.event.id">
-          <li v-if="row.gapHours" class="gap" aria-hidden="true">{{ tn('time.hours', row.gapHours) }}</li>
-          <li class="row" :class="{ flash: flash === row.event.id }" :data-event="row.event.id" :style="{ '--c': row.color }" role="button" tabindex="0" @click="editing = row.event" @keydown.enter="editing = row.event">
-            <div class="time">
-              {{ clock(row.event.eventAt * 1000) }}
-              <span v-if="row.event.timeOffset < 0" class="late">{{ t('journal.backdated') }}</span>
-            </div>
-            <div class="rail">
-              <span class="line" />
-              <span class="node">
-                {{ row.quick ? '📝' : (row.card?.emoji ?? '•') }}
-                <CircleQuestionMark v-if="row.event.versions.length" class="versions" :size="17" :stroke-width="2.5" />
-              </span>
-            </div>
-            <div class="body">
-              <div v-if="row.tags.length || row.chips.length" class="flex flex-wrap gap-1">
-                <span
-                  v-for="tag in row.tags"
-                  :key="tag.label"
-                  class="tag"
-                  :style="tag.color ? { background: `${tag.color}22`, color: tag.color } : undefined"
-                >
-                  {{ tag.label }}
-                </span>
-                <span v-for="chip in row.chips" :key="chip.name" class="vchip">
-                  <span class="vn">{{ chip.name }}</span>
-                  <span class="va">{{ chip.amount }}<small v-if="chip.unit">{{ chip.unit }}</small></span>
+        <ol v-else class="timeline">
+          <template v-for="row in rows" :key="row.event.id">
+            <li v-if="row.gapHours" class="gap" aria-hidden="true">{{ tn('time.hours', row.gapHours) }}</li>
+            <li class="row" :class="{ flash: flash === row.event.id, sel: editingDocked && editing?.id === row.event.id }" :data-event="row.event.id" :style="{ '--c': row.color }" role="button" tabindex="0" @click="openEvent(row.event)" @keydown.enter="openEvent(row.event)">
+              <div class="time">
+                {{ clock(row.event.eventAt * 1000) }}
+                <span v-if="row.event.timeOffset < 0" class="late">{{ t('journal.backdated') }}</span>
+              </div>
+              <div class="rail">
+                <span class="line" />
+                <span class="node">
+                  {{ row.quick ? '📝' : (row.card?.emoji ?? '•') }}
+                  <CircleQuestionMark v-if="row.event.versions.length" class="versions" :size="17" :stroke-width="2.5" />
                 </span>
               </div>
-              <p v-if="row.event.note" class="note">{{ row.event.note }}</p>
-              <div v-if="row.event.attachments.length" class="mt-1.5 flex flex-wrap gap-1.5">
-                <button
-                  v-for="(a, i) in row.event.attachments"
-                  :key="a.id"
-                  class="attachment"
-                  :class="{ file: !isVisual(a) }"
-                  :aria-label="a.name"
-                  @click.stop="openViewer(row.event.attachments, i)"
-                >
-                  <img v-if="isVisual(a)" :src="previewUrl(a)" alt="" loading="lazy" class="size-full rounded-lg object-cover" />
-                  <template v-else><AttachmentIcon :attachment="a" :size="16" /><span class="truncate">{{ a.name }}</span></template>
-                  <span v-if="isVideo(a) && isVisual(a)" class="play">▶</span>
-                </button>
+              <div class="body">
+                <div v-if="row.tags.length || row.chips.length" class="flex flex-wrap gap-1">
+                  <span
+                    v-for="tag in row.tags"
+                    :key="tag.label"
+                    class="tag"
+                    :style="tag.color ? { background: `${tag.color}22`, color: tag.color } : undefined"
+                  >
+                    {{ tag.label }}
+                  </span>
+                  <span v-for="chip in row.chips" :key="chip.name" class="vchip">
+                    <span class="vn">{{ chip.name }}</span>
+                    <span class="va">{{ chip.amount }}<small v-if="chip.unit">{{ chip.unit }}</small></span>
+                  </span>
+                </div>
+                <p v-if="row.event.note" class="note">{{ row.event.note }}</p>
+                <div v-if="row.event.attachments.length" class="mt-1.5 flex flex-wrap gap-1.5">
+                  <button
+                    v-for="(a, i) in row.event.attachments"
+                    :key="a.id"
+                    class="attachment"
+                    :class="{ file: !isVisual(a) }"
+                    :aria-label="a.name"
+                    @click.stop="openViewer(row.event.attachments, i)"
+                  >
+                    <img v-if="isVisual(a)" :src="previewUrl(a)" alt="" loading="lazy" class="size-full rounded-lg object-cover" />
+                    <template v-else><AttachmentIcon :attachment="a" :size="16" /><span class="truncate">{{ a.name }}</span></template>
+                    <span v-if="isVideo(a) && isVisual(a)" class="play">▶</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          </li>
-        </template>
-      </ol>
-    </div>
+            </li>
+          </template>
+        </ol>
+      </div>
 
-    <button class="fab" :aria-label="t('journal.finder')" @click="finding = true"><LayoutDashboard :size="24" /></button>
-
-    <JournalFinder v-if="finding" :day="day" @pick="pickDay" @jump="jump" @resolve="editing = $event" @close="finding = false" />
-    <EventEditor v-if="editing" :key="editing.id" :event="editing" @close="editing = null" />
-  </main>
+      <template v-if="!isDesktop">
+        <button class="fab" :aria-label="t('journal.finder')" @click="finding = true"><LayoutDashboard :size="24" /></button>
+        <JournalFinder v-if="finding" :day="day" @pick="pickDay" @jump="jump" @resolve="openEvent" @close="finding = false" />
+      </template>
+      <EventEditor v-if="editing && !editingDocked" :key="editing.id" :event="editing" @close="closeEditor" />
+    </main>
+    <aside v-if="isDesktop" class="relative min-h-0 border-l border-zinc-200 bg-white">
+      <EventEditor v-if="editing && editingDocked" ref="editor" :key="editing.id" :event="editing" docked @close="closeEditor" />
+      <p v-else class="p-8 text-center text-sm text-zinc-400">{{ t('journal.pickHint') }}</p>
+    </aside>
+  </div>
 </template>
 
 <style scoped>
@@ -248,6 +281,9 @@ watch([flash, rows], async ([id]) => {
 }
 .row:active {
   background: rgb(0 0 0 / 0.04);
+}
+.row.sel {
+  background: #eef2ff;
 }
 .time {
   display: flex;

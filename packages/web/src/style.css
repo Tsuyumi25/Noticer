@@ -38,6 +38,13 @@
   background: white;
   box-shadow: 0 24px 60px rgb(0 0 0 / 0.3);
 }
+.docked-sheet {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+  background: white;
+}
 .center-dialog.narrow {
   width: min(640px, calc(100vw - 48px));
 }

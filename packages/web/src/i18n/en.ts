@@ -152,6 +152,7 @@ export default {
   'journal.backdated': 'Late',
   'journal.calendar': 'Calendar',
   'journal.finder': 'Gallery, calendar and search',
+  'journal.pickHint': 'Pick an entry to see and edit it here',
   'journal.prevMonth': 'Previous month',
   'journal.nextMonth': 'Next month',
 

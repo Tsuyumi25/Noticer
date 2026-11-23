@@ -16,7 +16,7 @@ import JournalCalendar from './JournalCalendar.vue'
 import type { ConflictEvent } from '../versions.ts'
 
 /** Finding a picture, a day or an entry: the gallery opens first; the calendar, search and any conflicts sit beside it, a swipe away. */
-const props = defineProps<{ day: Date }>()
+const props = defineProps<{ day: Date; docked?: boolean }>()
 const emit = defineEmits<{ pick: [day: string]; jump: [eventId: number, eventAt: number]; resolve: [event: ConflictEvent]; close: [] }>()
 
 type Tab = 'calendar' | 'search' | 'gallery' | 'conflicts'
@@ -30,7 +30,7 @@ const tabs = computed(() => {
   if (conflicts.value?.length) all.push({ key: 'conflicts', icon: CircleQuestionMark, label: 'finder.conflicts' })
   return all
 })
-const tab = ref<Tab>('gallery')
+const tab = ref<Tab>(props.docked ? 'calendar' : 'gallery')
 watch(tabs, (list) => {
   if (!list.some((x) => x.key === tab.value)) tab.value = list.at(-1)!.key
 })
@@ -46,7 +46,11 @@ const swipe = usePageSwipe(pane, {
   },
 })
 
-const { sheet, sheetStyle, backdrop, animated, leave, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } = useSheetDrag({ onRequestClose: () => leave() })
+const { sheet, sheetStyle, backdrop, animated, leave, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } = useSheetDrag({
+  onRequestClose: () => leave(),
+  docked: props.docked,
+  onLeft: () => emit('close'),
+})
 // The sheet keeps its rounded top at rest; only its slide comes from the drag.
 const slide = computed(() => ({ transform: sheetStyle.value.transform }))
 function onTransitionEnd(e: TransitionEvent) {
@@ -55,11 +59,11 @@ function onTransitionEnd(e: TransitionEvent) {
 /** The journal moves to what was picked while the sheet slides away. */
 function pick(day: string) {
   emit('pick', day)
-  leave()
+  if (!props.docked) leave()
 }
 function jump(eventId: number, eventAt: number) {
   emit('jump', eventId, eventAt)
-  leave()
+  if (!props.docked) leave()
 }
 
 const { data: config } = useQuery(configQuery)
@@ -140,22 +144,22 @@ function view(index: number) {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && !document.querySelector('.pswp')) leave()
+  if (e.key === 'Escape' && !props.docked && !document.querySelector('.pswp')) leave()
 }
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-40 flex items-end">
-      <div class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" @click="leave()" />
+  <Teleport to="body" :disabled="docked">
+    <div :class="docked ? 'h-full' : 'fixed inset-0 z-40 flex items-end'">
+      <div v-if="!docked" class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" @click="leave()" />
       <section
         ref="sheet"
-        role="dialog"
+        :role="docked ? 'region' : 'dialog'"
         :aria-label="t(tabs.find((x) => x.key === tab)!.label)"
-        class="relative mx-auto flex h-[calc(100dvh-56px)] w-full max-w-2xl flex-col rounded-t-2xl bg-white pt-1 shadow-xl"
-        :class="{ 'sheet-animated': animated }"
+        class="relative flex flex-col bg-white"
+        :class="[docked ? 'h-full pt-3' : 'mx-auto h-[calc(100dvh-56px)] w-full max-w-2xl rounded-t-2xl pt-1 shadow-xl', { 'sheet-animated': animated }]"
         :style="slide"
         @touchstart="onTouchStart"
         @touchmove="onTouchMove"
@@ -163,8 +167,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         @touchcancel="onTouchEnd"
         @transitionend="onTransitionEnd"
       >
-        <div class="mx-auto mt-1 mb-1.5 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
-        <div class="seg mx-3 mb-2 shrink-0" role="tablist">
+        <div v-if="!docked" class="mx-auto mt-1 mb-1.5 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
+        <div class="seg mx-3 mb-2 shrink-0" :class="{ stacked: docked }" role="tablist">
           <button v-for="x in tabs" :key="x.key" role="tab" :aria-selected="tab === x.key" :class="{ on: tab === x.key }" @click="tab = x.key">
             <component :is="x.icon" :size="18" />{{ t(x.label) }}
           </button>
@@ -251,6 +255,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   border-radius: 9px;
   color: #52525b;
   font-size: 14px;
+}
+.seg.stacked button {
+  height: 48px;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
 }
 .seg button.on {
   background: white;

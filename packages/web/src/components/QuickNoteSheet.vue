@@ -17,7 +17,7 @@ import { pickedDeleted, type VersionPick } from '../versions.ts'
 
 /** A record that belongs to no card: start from any card's tag, or type a new one. */
 /** `at`: when a new note starts out, if not now. */
-const props = defineProps<{ event?: SheetEvent; at?: number; versions?: VersionPick; instant?: boolean }>()
+const props = defineProps<{ event?: SheetEvent; at?: number; versions?: VersionPick; instant?: boolean; docked?: boolean }>()
 const emit = defineEmits<{ close: []; version: [index: number] }>()
 const gone = computed(() => pickedDeleted(props.versions))
 
@@ -35,7 +35,7 @@ const timeLabel = computed(() => {
   if (happenedAt.value === null) return t('time.now')
   const now = Date.now()
   const at = absoluteTime(happenedAt.value, now)
-  return isDesktop.value ? `${relativeTime(happenedAt.value, now)} · ${at}` : at
+  return isDesktop.value && !props.docked ? `${relativeTime(happenedAt.value, now)} · ${at}` : at
 })
 
 const { data: start } = useQuery({
@@ -131,15 +131,18 @@ const remove = useMutation({
 const confirming = ref(false)
 const deleting = ref(false)
 
-const centered = isDesktop.value
-const overlayClass = centered ? 'absolute inset-0 flex items-center justify-center bg-black/40' : 'absolute inset-0 flex items-end bg-black/40'
-const panelClass = centered ? 'w-full max-w-sm rounded-2xl bg-white p-4' : 'w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]'
+const docked = props.docked === true
+const centered = isDesktop.value && !docked
+const floating = centered || docked
+const overlayClass = floating ? 'absolute inset-0 flex items-center justify-center bg-black/40 p-4' : 'absolute inset-0 flex items-end bg-black/40'
+const panelClass = floating ? 'w-full max-w-sm rounded-2xl bg-white p-4' : 'w-full rounded-t-2xl bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]'
 
 const { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } = useSheetDrag({
   onRequestClose: requestClose,
   canDrag: () => !confirming.value && !deleting.value && adding.value === null,
   instant: props.instant,
   centered,
+  docked,
   onLeft: () => emit('close'),
 })
 
@@ -149,6 +152,8 @@ function requestClose() {
   settle()
   confirming.value = true
 }
+
+defineExpose({ dirty, requestClose })
 
 function onTransitionEnd(e: TransitionEvent) {
   if (isLeaveEnd(e)) emit('close')
@@ -167,12 +172,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-50">
-      <div class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" @click="centered && requestClose()" />
+  <Teleport to="body" :disabled="docked">
+    <div :class="docked ? 'relative h-full' : 'fixed inset-0 z-50'">
+      <div v-if="!docked" class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" @click="centered && requestClose()" />
       <section
         ref="sheet"
-        :class="[centered ? 'center-dialog narrow' : 'full-sheet', { 'sheet-animated': animated }]"
+        :class="[docked ? 'docked-sheet' : centered ? 'center-dialog narrow' : 'full-sheet', { 'sheet-animated': animated }]"
         :style="sheetStyle"
         @touchstart="onTouchStart"
         @touchmove="onTouchMove"
@@ -181,7 +186,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         @transitionend="onTransitionEnd"
       >
         <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div v-if="!centered" class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
+          <div v-if="!floating" class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
           <div class="flex h-12 shrink-0 items-center px-4">
             <h2 class="text-lg font-semibold">📝 {{ t('nav.quickNote') }}</h2>
           </div>
