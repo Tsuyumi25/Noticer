@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { Check, Pencil, PinOff, Settings2 } from 'lucide-vue-next'
 import type { Layout } from 'server/config'
 import type { CardModel, Dashboard } from 'server/dashboard'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { arranging, pinsDropped } from '../arranging.ts'
 import { CELLS_PER_CARD, fitScale, pinOf, pinRect, placeStack, sizeStep, stepScale, type Rect, type Step } from '../board.ts'
 import { t } from '../i18n/index.ts'
 import { useLayoutSave } from '../layoutSave.ts'
 import { vLongPress } from '../longPress.ts'
 import type { SheetCard } from './CheckinSheet.vue'
-import LayoutPopover from './LayoutPopover.vue'
 import SleepCard from './SleepCard.vue'
 import WaterCard from './WaterCard.vue'
 
@@ -127,8 +126,8 @@ function boxStyle(rect: Rect, at?: { left: number; top: number }) {
 }
 
 const fit = (scale: number) => ({ width: `${100 / scale}%`, transform: `scale(${scale})` })
-const layoutOpen = ref(false)
-const editing = ref(false)
+const editing = computed(() => arranging.value && props.layout.arrangement === 'stack')
+watchEffect(() => (pinsDropped.value = !!grid.value?.pinsDropped))
 
 const { save } = useLayoutSave()
 const savePins = (pins: Layout['pins']) => save({ ...props.layout, pins })
@@ -192,9 +191,7 @@ function closeMenu(e: Event) {
   if (!(e.target as Element).closest?.('[data-pin-menu]')) menu.value = null
 }
 function onKeydown(e: KeyboardEvent) {
-  if (e.key !== 'Escape') return
-  if (menu.value) menu.value = null
-  else if (editing.value && !layoutOpen.value) editing.value = false
+  if (e.key === 'Escape') menu.value = null
 }
 onMounted(() => {
   document.addEventListener('pointerdown', closeMenu)
@@ -203,43 +200,13 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('pointerdown', closeMenu)
   window.removeEventListener('keydown', onKeydown)
+  arranging.value = false
+  pinsDropped.value = false
 })
 </script>
 
 <template>
   <div class="relative flex h-full flex-col">
-    <div class="mb-2.5 flex shrink-0 items-center gap-2">
-      <button
-        data-layout-toggle
-        class="flex h-11 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"
-        :class="layoutOpen ? 'bg-white text-indigo-700 shadow-md' : 'bg-white/15 text-white hover:bg-white/25'"
-        :aria-expanded="layoutOpen"
-        @click="layoutOpen = !layoutOpen"
-      >
-        <Settings2 :size="18" />{{ t('layout.title') }}
-      </button>
-      <template v-if="layout.arrangement === 'stack'">
-        <button
-          class="flex h-11 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"
-          :class="editing ? 'bg-white text-indigo-700 shadow-md' : 'bg-white/15 text-white hover:bg-white/25'"
-          :aria-pressed="editing"
-          @click="editing = !editing"
-        >
-          <component :is="editing ? Check : Pencil" :size="18" />{{ editing ? t('layout.editDone') : t('layout.edit') }}
-        </button>
-        <button
-          v-if="editing && Object.keys(layout.pins).length"
-          class="flex h-11 items-center gap-2 rounded-xl bg-white/15 px-3.5 text-sm font-semibold text-white hover:bg-white/25"
-          @click="savePins({})"
-        >
-          <PinOff :size="18" />{{ t('layout.clearPins') }}
-        </button>
-        <span v-if="editing" class="text-sm text-white/85">{{ t('layout.editHint') }}</span>
-        <span v-else-if="grid?.pinsDropped" class="text-sm text-amber-100">{{ t('layout.pinsDropped') }}</span>
-      </template>
-    </div>
-    <LayoutPopover v-if="layoutOpen" :layout="layout" @close="layoutOpen = false" />
-
     <div ref="root" class="relative min-h-0 flex-1 overflow-hidden">
       <div v-if="!measured" />
       <div v-else-if="layout.arrangement === 'sections'" class="origin-top-left" :style="fit(sections.scale)">

@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/vue-query'
 import { Palette, Plus } from 'lucide-vue-next'
 import { computed, nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { arranging } from '../arranging.ts'
 import CardBoard from '../components/CardBoard.vue'
 import CardBuilderSheet from '../components/CardBuilderSheet.vue'
 import CheckinSheet, { type SheetCard } from '../components/CheckinSheet.vue'
 import EventEditor from '../components/EventEditor.vue'
+import LayoutPanel from '../components/LayoutPanel.vue'
 import RecentPanel from '../components/RecentPanel.vue'
 import ReviewSheet from '../components/ReviewSheet.vue'
 import SleepCard from '../components/SleepCard.vue'
@@ -56,7 +58,8 @@ function closeStyle() {
       <p v-else-if="isError" class="p-6 text-center text-white">{{ t('common.loadFailed') }}</p>
       <CardBoard v-else-if="data && config" :dashboard="data" :layout="config.layout" @open="opened = $event" @review="openReview" />
     </main>
-    <RecentPanel class="min-w-0 flex-[3]" @edit="editing = $event" />
+    <RecentPanel v-show="!arranging" class="min-w-0 flex-[3]" @edit="editing = $event" />
+    <LayoutPanel v-if="arranging && config" class="min-w-0 flex-[3]" :layout="config.layout" />
   </div>
   <div v-else class="dashboard min-h-dvh">
   <main

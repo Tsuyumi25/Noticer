@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
-import { BookOpen, House, Plus, Settings } from 'lucide-vue-next'
+import { BookOpen, House, Plus, Settings, Settings2 } from 'lucide-vue-next'
 import { ref, type Component } from 'vue'
 import { useRoute } from 'vue-router'
+import { arranging } from './arranging.ts'
 import QuickNoteSheet from './components/QuickNoteSheet.vue'
 import { t, type MessageKey } from './i18n/index.ts'
 import { conflictsQuery } from './queries.ts'
@@ -52,6 +53,15 @@ function openQuickNote() {
       {{ t(tab.label) }}
     </RouterLink>
     <span class="flex-1" />
+    <button
+      v-if="route.path === '/'"
+      class="mr-1 flex h-11 items-center gap-2 rounded-lg px-3 text-sm"
+      :class="arranging ? 'bg-indigo-50 font-semibold text-indigo-700' : 'text-zinc-600 hover:bg-zinc-100'"
+      :aria-pressed="arranging"
+      @click="arranging = !arranging"
+    >
+      <Settings2 :size="18" />{{ t('layout.title') }}
+    </button>
     <button class="flex h-11 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 text-sm font-semibold text-white" @click="openQuickNote">
       <Plus :size="18" />{{ t('nav.quickNote') }}
     </button>
