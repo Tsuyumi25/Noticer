@@ -7,6 +7,7 @@ import { api } from '../api.ts'
 import CardBuilderSheet from '../components/CardBuilderSheet.vue'
 import RulesSheet from '../components/RulesSheet.vue'
 import { locale, LOCALES, setLocale, t, type Locale } from '../i18n/index.ts'
+import { isDesktop } from '../viewport.ts'
 
 const locales = Object.entries(LOCALES) as [Locale, (typeof LOCALES)[Locale]][]
 
@@ -31,7 +32,7 @@ function closeCard() {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-dvh max-w-2xl flex-col bg-zinc-50 pb-6">
+  <main class="mx-auto flex max-w-2xl flex-col bg-zinc-50 pb-6" :class="isDesktop ? 'min-h-full' : 'min-h-dvh'">
     <header class="sticky top-0 border-b border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur">
       <h1 class="text-lg font-semibold">{{ t('nav.settings') }}</h1>
     </header>

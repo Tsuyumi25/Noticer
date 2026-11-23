@@ -52,7 +52,7 @@ function closeStyle() {
 </script>
 
 <template>
-  <div v-if="isDesktop" class="dashboard flex h-[calc(100dvh-56px)] gap-3.5 p-3.5">
+  <div v-if="isDesktop" class="dashboard flex h-full gap-3.5 p-3.5">
     <main class="relative min-w-0 flex-[7] overflow-hidden">
       <p v-if="isPending" class="p-6 text-center text-white/80">{{ t('common.loading') }}</p>
       <p v-else-if="isError" class="p-6 text-center text-white">{{ t('common.loadFailed') }}</p>

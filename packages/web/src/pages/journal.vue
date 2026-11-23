@@ -156,7 +156,7 @@ watch([flash, rows], async ([id]) => {
 </script>
 
 <template>
-  <div :class="isDesktop ? 'grid h-[calc(100dvh-56px)] grid-cols-[320px_minmax(0,1fr)_400px] bg-zinc-100' : 'contents'">
+  <div :class="isDesktop ? 'grid h-full grid-cols-[320px_minmax(0,1fr)_400px] bg-zinc-100' : 'contents'">
     <aside v-if="isDesktop" class="col-start-1 row-start-1 min-h-0 border-r border-zinc-200">
       <JournalFinder docked :day="day" :viewer-area="viewerArea" @pick="pickDay" @jump="jump" @resolve="openEvent" />
     </aside>
