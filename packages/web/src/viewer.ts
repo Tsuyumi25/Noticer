@@ -42,13 +42,27 @@ interface ViewerOptions {
   within?: HTMLElement | null
 }
 
+let current: { pswp: PhotoSwipe; attachments: Attachment[] } | null = null
+let opening = 0
+
+function dispose(pswp: PhotoSwipe) {
+  if (!pswp.opener.isOpen) pswp.isDestroying = true
+  pswp.options.showHideAnimationType = 'none'
+  pswp.destroy()
+}
+
 /** Opens attachments over the whole screen, at `index`: swipe between them, pinch to zoom, drag down to close. */
 export async function openViewer(attachments: Attachment[], index: number, { showInJournal, within }: ViewerOptions = {}) {
+  if (current?.attachments === attachments && current.pswp.opener.isOpen && !current.pswp.isDestroying) return current.pswp.goTo(index)
+  const ticket = ++opening
+  const dataSource = await Promise.all(attachments.map(slideOf))
+  if (ticket !== opening) return
+  if (current) dispose(current.pswp)
   const pswp = new PhotoSwipe({
     ...(within
-      ? { appendToEl: within, mainClass: 'pswp--within', getViewportSizeFn: () => ({ x: within.clientWidth, y: within.clientHeight }) }
+      ? { appendToEl: within, mainClass: 'pswp--within', trapFocus: false, getViewportSizeFn: () => ({ x: within.clientWidth, y: within.clientHeight }) }
       : {}),
-    dataSource: await Promise.all(attachments.map(slideOf)),
+    dataSource,
     index,
     bgOpacity: 1,
     closeOnVerticalDrag: true,
@@ -60,8 +74,16 @@ export async function openViewer(attachments: Attachment[], index: number, { sho
     arrowPrevTitle: t('attach.previous'),
     arrowNextTitle: t('attach.next'),
   })
+  current = { pswp, attachments }
+  pswp.on('destroy', () => {
+    if (current?.pswp === pswp) current = null
+  })
   // The video's own controls take the touch instead of the swipe.
-  pswp.addFilter('preventPointerEvent', (prevent, e) => (e.target instanceof Element && e.target.closest('video') ? false : prevent))
+  pswp.addFilter('preventPointerEvent', (prevent, e) => {
+    if (!(e.target instanceof Element)) return prevent
+    if (e.target.closest('video')) return false
+    return within && !pswp.element?.contains(e.target) ? false : prevent
+  })
   pswp.on('uiRegister', () => {
     if (showInJournal) {
       pswp.ui?.registerElement({
