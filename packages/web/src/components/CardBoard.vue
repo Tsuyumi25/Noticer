@@ -22,7 +22,6 @@ const ROW = CARD_H + GAP
 const HEADING = 26
 const SECTION_GAP = 16
 const GRID_MIN = 176
-const GEAR_ROOM = 52
 
 const root = ref<HTMLElement | null>(null)
 const width = ref(0)
@@ -44,7 +43,7 @@ const sections = computed(() => {
     ...(sleep.value ? [{ slots: 2 }] : []),
     ...[props.dashboard.urgent, props.dashboard.others].filter((list) => list.length).map((list) => ({ slots: list.length })),
   ]
-  const columnsAt = (scale: number) => Math.max(2, Math.floor(((width.value - GEAR_ROOM) / scale + GAP) / (GRID_MIN + GAP)))
+  const columnsAt = (scale: number) => Math.max(2, Math.floor((width.value / scale + GAP) / (GRID_MIN + GAP)))
   const heightAt = (scale: number) =>
     parts.reduce((sum, part) => sum + HEADING + Math.ceil(part.slots / columnsAt(scale)) * ROW - GAP + SECTION_GAP, 0)
   const scale = fitScale(height.value, heightAt, props.layout.cardScale)
@@ -63,7 +62,7 @@ const sized = computed(() => {
   const ordered = items.map((item, i) => ({ item, i })).sort((a, b) => b.item.step - a.item.step || a.i - b.i).map((x) => x.item)
   const urgent = ordered.filter((item) => item.step > 0).length
   const rowsAt = (scale: number) => {
-    const room = (width.value - GEAR_ROOM) / scale
+    const room = width.value / scale
     const counts = pyramidRows(
       ordered.length,
       Math.floor((room + GAP) / (CARD_W + GAP)),
@@ -84,58 +83,63 @@ const layoutOpen = ref(false)
 </script>
 
 <template>
-  <div ref="root" class="relative h-full overflow-hidden">
-    <button
-      data-layout-toggle
-      class="absolute top-0 right-0 z-10 flex h-11 w-11 items-center justify-center rounded-xl bg-white/90 text-zinc-600 shadow-md"
-      :aria-label="t('layout.title')"
-      @click="layoutOpen = !layoutOpen"
-    >
-      <Settings2 :size="20" />
-    </button>
+  <div class="relative flex h-full flex-col">
+    <div class="mb-2.5 flex shrink-0 items-center gap-2">
+      <button
+        data-layout-toggle
+        class="flex h-11 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"
+        :class="layoutOpen ? 'bg-white text-indigo-700 shadow-md' : 'bg-white/15 text-white hover:bg-white/25'"
+        :aria-expanded="layoutOpen"
+        @click="layoutOpen = !layoutOpen"
+      >
+        <Settings2 :size="18" />{{ t('layout.title') }}
+      </button>
+    </div>
     <LayoutPopover v-if="layoutOpen" :layout="layout" @close="layoutOpen = false" />
 
-    <div v-if="!measured" />
-    <div v-else-if="layout.arrangement === 'sections'" class="origin-top-left" :style="fit(sections.scale)">
-      <template v-if="sleep">
-        <h2 class="section">{{ t('dashboard.sleep') }}</h2>
-        <div class="board-grid" :style="{ gridTemplateColumns: `repeat(${sections.columns}, minmax(0, 1fr))`, paddingRight: `${GEAR_ROOM / sections.scale}px` }">
-          <SleepCard class="col-span-2" :sleep="sleep" @open="emit('open', $event)" @review="emit('review', $event)" />
-        </div>
-      </template>
-      <template v-for="part in ['urgent', 'others'] as const" :key="part">
-        <template v-if="dashboard[part].length">
-          <h2 class="section">{{ t(part === 'urgent' ? 'dashboard.urgent' : 'dashboard.others') }}</h2>
-          <div class="board-grid" :style="{ gridTemplateColumns: `repeat(${sections.columns}, minmax(0, 1fr))`, paddingRight: `${GEAR_ROOM / sections.scale}px` }">
-            <WaterCard
-              v-for="card in dashboard[part]"
-              :key="card.id"
-              v-long-press="() => emit('review', card.id)"
-              :card="card"
-              class="cursor-pointer"
-              @click="emit('open', card)"
-            />
+    <div ref="root" class="relative min-h-0 flex-1 overflow-hidden">
+      <div v-if="!measured" />
+      <div v-else-if="layout.arrangement === 'sections'" class="origin-top-left" :style="fit(sections.scale)">
+        <template v-if="sleep">
+          <h2 class="section">{{ t('dashboard.sleep') }}</h2>
+          <div class="board-grid" :style="{ gridTemplateColumns: `repeat(${sections.columns}, minmax(0, 1fr))` }">
+            <SleepCard class="col-span-2" :sleep="sleep" @open="emit('open', $event)" @review="emit('review', $event)" />
           </div>
         </template>
-      </template>
-    </div>
+        <template v-for="part in ['urgent', 'others'] as const" :key="part">
+          <template v-if="dashboard[part].length">
+            <h2 class="section">{{ t(part === 'urgent' ? 'dashboard.urgent' : 'dashboard.others') }}</h2>
+            <div class="board-grid" :style="{ gridTemplateColumns: `repeat(${sections.columns}, minmax(0, 1fr))` }">
+              <WaterCard
+                v-for="card in dashboard[part]"
+                :key="card.id"
+                v-long-press="() => emit('review', card.id)"
+                :card="card"
+                class="cursor-pointer"
+                @click="emit('open', card)"
+              />
+            </div>
+          </template>
+        </template>
+      </div>
 
-    <div
-      v-else
-      class="absolute top-0 left-0 flex origin-top-left flex-col justify-end gap-2.5 pb-5"
-      :style="{ ...fit(sized.scale), height: `${100 / sized.scale}%`, paddingRight: `${GEAR_ROOM / sized.scale}px` }"
-    >
-      <div v-for="(row, r) in sized.rows" :key="r" class="flex items-end gap-2.5" :class="{ left: 'justify-start', center: 'justify-center', right: 'justify-end' }[layout.align]">
-        <div v-for="item in row" :key="item.kind === 'card' ? item.card.id : 'sleep'" class="shrink-0" :style="{ width: `${item.w}px`, height: `${item.h}px` }">
-          <div class="origin-top-left" :style="{ width: `${item.w / item.scale}px`, transform: `scale(${item.scale})` }">
-            <SleepCard v-if="item.kind === 'sleep' && sleep" :sleep="sleep" @open="emit('open', $event)" @review="emit('review', $event)" />
-            <WaterCard
-              v-else-if="item.kind === 'card'"
-              v-long-press="() => emit('review', item.card.id)"
-              :card="item.card"
-              class="cursor-pointer"
-              @click="emit('open', item.card)"
-            />
+      <div
+        v-else
+        class="absolute top-0 left-0 flex origin-top-left flex-col justify-end gap-2.5 pb-5"
+        :style="{ ...fit(sized.scale), height: `${100 / sized.scale}%` }"
+      >
+        <div v-for="(row, r) in sized.rows" :key="r" class="flex items-end gap-2.5" :class="{ left: 'justify-start', center: 'justify-center', right: 'justify-end' }[layout.align]">
+          <div v-for="item in row" :key="item.kind === 'card' ? item.card.id : 'sleep'" class="shrink-0" :style="{ width: `${item.w}px`, height: `${item.h}px` }">
+            <div class="origin-top-left" :style="{ width: `${item.w / item.scale}px`, transform: `scale(${item.scale})` }">
+              <SleepCard v-if="item.kind === 'sleep' && sleep" :sleep="sleep" @open="emit('open', $event)" @review="emit('review', $event)" />
+              <WaterCard
+                v-else-if="item.kind === 'card'"
+                v-long-press="() => emit('review', item.card.id)"
+                :card="item.card"
+                class="cursor-pointer"
+                @click="emit('open', item.card)"
+              />
+            </div>
           </div>
         </div>
       </div>

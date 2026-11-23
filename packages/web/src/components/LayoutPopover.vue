@@ -78,7 +78,7 @@ onUnmounted(() => {
     ref="root"
     role="dialog"
     :aria-label="t('layout.title')"
-    class="absolute top-14 right-0 z-20 max-h-[calc(100%-3.5rem)] w-80 overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-xl"
+    class="absolute top-14 left-0 z-20 max-h-[calc(100%-3.5rem)] w-80 overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-xl"
   >
     <template v-for="(p, i) in picks" :key="p.field">
       <p class="mb-2 text-xs font-semibold text-zinc-500" :class="{ 'mt-4': i > 0 }">{{ t(p.label) }}</p>
