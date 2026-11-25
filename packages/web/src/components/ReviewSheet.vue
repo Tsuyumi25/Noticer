@@ -169,7 +169,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         </div>
       </section>
 
-      <RulesSheet v-if="editingRules" :card-id="cardId" @close="editingRules = false" />
+      <RulesSheet v-if="editingRules" :card-id="cardId" @close="editingRules = false" @deleted="leave()" />
       <DayEventsSheet v-if="selected && data" :card-id="cardId" :card-tag="data.card.name" :date="selected" @close="selected = null" />
     </div>
   </Teleport>

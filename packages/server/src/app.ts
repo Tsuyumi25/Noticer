@@ -91,6 +91,8 @@ const newCardBody = z.object({
   copyOf: z.string().optional(),
 })
 
+const cardIdentityBody = z.object({ name: z.string().trim().min(1), emoji: z.string().trim().min(1) })
+
 const tagSettingsBody = z.object({ hiddenTags: z.array(z.string()), defaultTags: z.array(z.string()) })
 
 const tagNoteBody = z.object({ note: z.string() })
@@ -268,6 +270,31 @@ const api = new Hono<Env>()
       })
     })
     return c.json({ id }, 201)
+  })
+  .put('/cards/:cardId', zValidator('json', cardIdentityBody), (c) => {
+    const cardId = c.req.param('cardId')
+    const { name, emoji } = c.req.valid('json')
+    if (!c.var.store.read().cards.some((k) => k.id === cardId)) return c.json({ error: 'unknown card' }, 404)
+    c.var.store.update((raw) => {
+      Object.assign(raw.cards.find((k) => k.id === cardId)!, { name, emoji })
+    })
+    return c.body(null, 204)
+  })
+  .delete('/cards/:cardId', (c) => {
+    const cardId = c.req.param('cardId')
+    if (cardId === SLEEP_CARD || cardId === WAKE_CARD) return c.json({ error: 'the sleep cards stay' }, 400)
+    const config = c.var.store.read()
+    if (!config.cards.some((k) => k.id === cardId)) return c.json({ error: 'unknown card' }, 404)
+    const { [cardId]: pinned, ...pins } = config.layout.pins
+    const moved = c.var.db.transaction(() => {
+      const changes = c.var.db.prepare('UPDATE events SET card_id = ? WHERE card_id = ?').run(PURE_CARD, cardId).changes
+      c.var.store.update((raw) => {
+        raw.cards = raw.cards.filter((k) => k.id !== cardId)
+        if (pinned) raw.layout = { ...config.layout, pins }
+      })
+      return changes
+    })()
+    return c.json({ moved })
   })
   .get('/cards/:cardId/rules', (c) => {
     const config = c.var.store.read()

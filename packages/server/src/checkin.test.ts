@@ -113,6 +113,35 @@ describe('new cards', () => {
   })
 })
 
+describe('changing a card', () => {
+  it('renames and re-emojis a card without touching its root or rules, and refuses a blank name or an unknown card', async () => {
+    const { store, send } = setup()
+    expect((await send('PUT', '/api/cards/sunscreen', { name: ' 早晚防曬 ', emoji: '🧴' })).status).toBe(204)
+    expect(store.read().cards.find((k) => k.id === 'sunscreen')).toMatchObject({ name: '早晚防曬', emoji: '🧴', root: '護膚', defaultTags: ['防曬'] })
+    expect((await send('PUT', '/api/cards/sunscreen', { name: ' ', emoji: '🧴' })).status).toBe(400)
+    expect((await send('PUT', '/api/cards/nope', { name: 'x', emoji: '🙂' })).status).toBe(404)
+    expect(store.read().cards.find((k) => k.id === 'sunscreen')?.name).toBe('早晚防曬')
+  })
+
+  it("deletes a card but keeps its records as quick notes with their tags, so another card on the same root still counts them", async () => {
+    const { db, store, send } = setup()
+    await send('POST', '/api/checkin', { cardId: 'sunscreen', note: '早上', tags: ['防曬'] })
+    await send('POST', '/api/checkin', { cardId: 'skincare', note: '', tags: [] })
+    await send('PUT', '/api/layout', { ...store.read().layout, pins: { sunscreen: { side: 'left', fx: 0, fy: 0 }, skincare: { side: 'left', fx: 1, fy: 0 } } })
+    const res = await send('DELETE', '/api/cards/sunscreen')
+    expect(await res.json()).toEqual({ moved: 1 })
+    expect(store.read().cards.map((k) => k.id)).toEqual(['skincare', 'weight', 'practice'])
+    expect(Object.keys(store.read().layout.pins)).toEqual(['skincare'])
+    expect(allEvents(db).map((e) => [e.cardId, e.tags, e.note])).toEqual([
+      ['pure', ['護膚', '防曬'], '早上'],
+      ['skincare', ['護膚'], null],
+    ])
+    const calendar = await (await send('GET', '/api/cards/skincare/calendar')).json()
+    expect(calendar.days.at(-1)).toMatchObject({ value: 2, state: 'logged' })
+    expect((await send('DELETE', '/api/cards/sunscreen')).status).toBe(404)
+  })
+})
+
 describe('editing an event', () => {
   async function recorded() {
     const ctx = setup()
