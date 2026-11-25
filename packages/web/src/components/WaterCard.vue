@@ -4,10 +4,12 @@ import { computed } from 'vue'
 import { t } from '../i18n/index.ts'
 import { ACCENT, BACKGROUND, formatHours, hasStatusIcon, WAVE_SECONDS } from '../status.ts'
 import DailyStrip from './DailyStrip.vue'
+import ReportCorner from './ReportCorner.vue'
 import StatusCorner from './StatusCorner.vue'
 import WaterSurface from './WaterSurface.vue'
 
 const props = defineProps<{ card: CardModel }>()
+const emit = defineEmits<{ review: [] }>()
 
 const now = computed(() => formatHours(props.card.nowHours))
 const max = computed(() => formatHours(props.card.maxHours))
@@ -43,8 +45,9 @@ const label = computed(() => (props.card.mode !== null && props.card.nowHours ==
           </template>
         </div>
       </div>
-      <DailyStrip v-if="card.strip" :strip="card.strip" />
+      <DailyStrip v-if="card.strip" :strip="card.strip" @report="emit('review')" />
     </div>
+    <ReportCorner v-if="!card.strip" @click.stop="emit('review')" />
   </div>
 </template>
 
@@ -59,13 +62,15 @@ const label = computed(() => (props.card.mode !== null && props.card.nowHours ==
   box-shadow: rgba(15, 23, 42, 0.18) 0 4px 12px;
 }
 .body {
+  --edge-x: 6px;
+  --edge-b: 7px;
   position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 6px 7px;
+  padding: 8px var(--edge-x) var(--edge-b);
 }
 .name {
   font-size: 12px;

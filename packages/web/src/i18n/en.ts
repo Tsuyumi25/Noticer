@@ -21,6 +21,7 @@ export default {
   'card.since': 'Since last',
   'card.never': 'No record',
   'card.noLimit': 'No limit',
+  'card.report': 'View report',
   'card.tooSoon': 'Too soon',
   'card.ready': 'Ready',
   'card.almostDue': 'Almost due',

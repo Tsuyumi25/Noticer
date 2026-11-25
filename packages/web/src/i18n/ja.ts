@@ -21,6 +21,7 @@ export default {
   'card.since': '経過',
   'card.never': '記録なし',
   'card.noLimit': '基準なし',
+  'card.report': 'レポートを見る',
   'card.tooSoon': 'まだ早い',
   'card.ready': 'OK',
   'card.almostDue': 'もうすぐ',

@@ -20,6 +20,7 @@ export default {
   'card.since': '距今',
   'card.never': '無記錄',
   'card.noLimit': '沒有門檻',
+  'card.report': '看報表',
   'card.tooSoon': '太近',
   'card.ready': '可以了',
   'card.almostDue': '快到了',

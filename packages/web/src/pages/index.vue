@@ -15,7 +15,6 @@ import SleepCard from '../components/SleepCard.vue'
 import StyleSheet from '../components/StyleSheet.vue'
 import WaterCard from '../components/WaterCard.vue'
 import { t } from '../i18n/index.ts'
-import { vLongPress } from '../longPress.ts'
 import { configQuery, dashboardQuery } from '../queries.ts'
 import { isDesktop } from '../viewport.ts'
 import type { ConflictEvent } from '../versions.ts'
@@ -81,7 +80,7 @@ function closeStyle() {
           <WaterCard
             v-for="card in data.urgent"
             :key="card.id"
-            v-long-press="() => openReview(card.id)"
+            @review="openReview(card.id)"
             :card="card"
             class="cursor-pointer"
             @click="opened = card"
@@ -94,7 +93,7 @@ function closeStyle() {
           <WaterCard
             v-for="card in data.others"
             :key="card.id"
-            v-long-press="() => openReview(card.id)"
+            @review="openReview(card.id)"
             :card="card"
             class="cursor-pointer"
             @click="opened = card"

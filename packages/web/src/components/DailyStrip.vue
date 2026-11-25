@@ -2,10 +2,12 @@
 import { useQuery } from '@tanstack/vue-query'
 import type { CardModel } from 'server/dashboard'
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { t } from '../i18n/index.ts'
 import { configQuery } from '../queries.ts'
 import { arrangeStrip } from '../strip.ts'
 
 const props = defineProps<{ strip: NonNullable<CardModel['strip']> }>()
+const emit = defineEmits<{ report: [] }>()
 const { data: config } = useQuery(configQuery)
 const style = computed(() => config.value?.strip)
 
@@ -55,7 +57,17 @@ watch([() => props.strip, style], () => void fit(), { deep: true })
 
 <template>
   <div v-if="style && parts" ref="root" class="strip" :class="[`look-${style.look}`, `weight-${style.weight}`, `side-${style.side}`]" :style="{ '--shrink': shrink }">
-    <span class="day today" :class="`s-${parts.today.state}`" :style="{ flexGrow: parts.today.grow }"><span>{{ parts.today.text }}</span></span>
+    <span
+      class="day today"
+      :class="`s-${parts.today.state}`"
+      :style="{ flexGrow: parts.today.grow }"
+      role="button"
+      tabindex="0"
+      :aria-label="t('card.report')"
+      @click.stop="emit('report')"
+      @keydown.enter.stop="emit('report')"
+      @keydown.space.prevent.stop="emit('report')"
+    ><span>{{ parts.today.text }}</span></span>
     <div class="past" :style="{ flexGrow: total(parts.groups.flat()) }">
       <div
         v-for="(group, i) in parts.groups"
@@ -94,10 +106,21 @@ watch([() => props.strip, style], () => void fit(), { deep: true })
   min-width: 0;
 }
 .past {
+  align-self: flex-end;
+  height: calc(26px + var(--edge-b));
+  margin-bottom: calc(-1 * var(--edge-b));
   gap: 2px;
 }
 .side-right .today {
   order: 1;
+  margin-right: calc(-1 * var(--edge-x));
+  border-right-width: 0;
+  border-radius: 9px 0 0 0;
+}
+.side-left .today {
+  margin-left: calc(-1 * var(--edge-x));
+  border-left-width: 0;
+  border-radius: 0 9px 0 0;
 }
 .day {
   display: inline-flex;
@@ -114,11 +137,35 @@ watch([() => props.strip, style], () => void fit(), { deep: true })
   border: 0 solid var(--line);
 }
 .today {
-  height: 26px;
+  position: relative;
+  align-self: flex-end;
+  height: calc(26px + var(--edge-b));
+  margin-bottom: calc(-1 * var(--edge-b));
   padding: 0 5px;
   font-size: calc(13.5px * var(--shrink));
   border-width: var(--bw);
-  border-radius: 6.4px;
+  border-bottom-width: 0;
+  cursor: pointer;
+}
+.today::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: max(100%, 44px);
+}
+.today:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: -2px;
+}
+@media (hover: hover) {
+  .today {
+    transition: filter 0.15s;
+  }
+  .today:hover {
+    filter: brightness(0.88) saturate(1.4);
+  }
 }
 .look-cells .group .day {
   border-width: var(--bw);

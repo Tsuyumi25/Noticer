@@ -2,9 +2,9 @@
 import type { SleepCard } from 'server/dashboard'
 import { computed } from 'vue'
 import { t } from '../i18n/index.ts'
-import { vLongPress } from '../longPress.ts'
 import { ACCENT, BACKGROUND, formatHours, hasStatusIcon, WAVE_SECONDS } from '../status.ts'
 import { clock } from '../time.ts'
+import ReportCorner from './ReportCorner.vue'
 import StatusCorner from './StatusCorner.vue'
 import type { SheetCard } from './CheckinSheet.vue'
 import WaterSurface from './WaterSurface.vue'
@@ -52,7 +52,6 @@ const corner = computed(() => {
         :key="i"
         class="half cursor-pointer"
         :class="{ lit: h.lit, other: sleep.state !== 'unknown' && !h.lit }"
-        v-long-press="() => $emit('review', h.id)"
         @click="$emit('open', { id: h.id, name: h.name, emoji: h.emoji })"
       >
         <template v-if="h.lit">
@@ -77,11 +76,13 @@ const corner = computed(() => {
         </div>
       </div>
     </div>
+    <ReportCorner @click.stop="$emit('review', sleep.sleepCard.id)" />
   </div>
 </template>
 
 <style scoped>
 .card {
+  position: relative;
   height: 125px;
   overflow: hidden;
   border-radius: 12px;

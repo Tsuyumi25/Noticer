@@ -6,7 +6,6 @@ import { arranging, pinsDropped } from '../arranging.ts'
 import { CELLS_PER_CARD, fitScale, pinOf, pinRect, placeStack, sizeStep, stepScale, type Rect, type Step } from '../board.ts'
 import { t } from '../i18n/index.ts'
 import { useLayoutSave } from '../layoutSave.ts'
-import { vLongPress } from '../longPress.ts'
 import type { SheetCard } from './CheckinSheet.vue'
 import SleepCard from './SleepCard.vue'
 import WaterCard from './WaterCard.vue'
@@ -223,7 +222,7 @@ onUnmounted(() => {
               <WaterCard
                 v-for="card in dashboard[part]"
                 :key="card.id"
-                v-long-press="() => emit('review', card.id)"
+                @review="emit('review', card.id)"
                 :card="card"
                 class="cursor-pointer"
                 @click="emit('open', card)"
@@ -263,7 +262,7 @@ onUnmounted(() => {
               <SleepCard v-if="entry.kind === 'sleep' && sleep" :sleep="sleep" @open="emit('open', $event)" @review="emit('review', $event)" />
               <WaterCard
                 v-else-if="entry.kind === 'card'"
-                v-long-press="() => emit('review', entry.card.id)"
+                @review="emit('review', entry.card.id)"
                 :card="entry.card"
                 class="cursor-pointer"
                 @click="emit('open', entry.card)"
