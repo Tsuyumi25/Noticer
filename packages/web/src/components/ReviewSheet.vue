@@ -13,13 +13,16 @@ import DayEventsSheet from './DayEventsSheet.vue'
 import RulesSheet from './RulesSheet.vue'
 
 /** `sleep`: the card is half of the sleep pair, so the sheet opens on the rhythm analysis with the months beside it. */
-const props = defineProps<{ cardId: string; sleep?: boolean }>()
+const props = defineProps<{ cardId: string; sleep?: boolean; docked?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
-const centered = isDesktop.value
+const docked = props.docked === true
+const centered = isDesktop.value && !docked
+const floating = centered || docked
 const { sheet, sheetStyle, backdrop, animated, leave, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd } = useSheetDrag({
   onRequestClose: () => leave(),
   centered,
+  docked,
   onLeft: () => emit('close'),
   // The rhythm chart scrolls sideways; a pull starting on it stays a scroll.
   canDrag: (e) => selected.value === null && !(e.target as Element).closest('[data-hscroll]'),
@@ -99,19 +102,21 @@ function onTransitionEnd(e: TransitionEvent) {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && selected.value === null && !editingRules.value) leave()
+  if (e.key !== 'Escape' || selected.value !== null || editingRules.value) return
+  if (docked && document.querySelector('.center-dialog')) return
+  leave()
 }
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <Teleport to="body">
-    <div class="fixed inset-0 z-50">
-      <div class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" @click="centered && leave()" />
+  <Teleport to="body" :disabled="docked">
+    <div :class="docked ? 'relative h-full' : 'fixed inset-0 z-50'">
+      <div v-if="!docked" class="absolute inset-0 bg-black" :class="{ 'sheet-animated': animated }" :style="{ opacity: backdrop }" @click="centered && leave()" />
       <section
         ref="sheet"
-        :class="[centered ? (sleep ? 'center-dialog flex-col' : 'center-dialog narrow flex-col') : 'full-sheet', { 'sheet-animated': animated }]"
+        :class="[docked ? 'docked-sheet flex-col' : centered ? (sleep ? 'center-dialog flex-col' : 'center-dialog narrow flex-col') : 'full-sheet', { 'sheet-animated': animated }]"
         :style="sheetStyle"
         @touchstart="onTouchStart"
         @touchmove="onTouchMove"
@@ -119,10 +124,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         @touchcancel="onTouchEnd"
         @transitionend="onTransitionEnd"
       >
-        <div v-if="!centered" class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
+        <div v-if="!floating" class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300" />
         <header class="flex shrink-0 items-center gap-1 py-1 pr-1 pl-1">
           <button class="inline-flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500" :aria-label="t('common.close')" @click="leave">
-            <X v-if="centered" :size="22" /><ChevronDown v-else :size="24" />
+            <X v-if="floating" :size="22" /><ChevronDown v-else :size="24" />
           </button>
           <h2 v-if="data" class="flex-1 text-lg font-semibold">{{ data.card.emoji }} {{ data.card.name }}</h2>
           <button

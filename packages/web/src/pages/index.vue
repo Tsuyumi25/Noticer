@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useQuery } from '@tanstack/vue-query'
 import { Palette, Plus } from 'lucide-vue-next'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { arranging } from '../arranging.ts'
 import CardBoard from '../components/CardBoard.vue'
@@ -28,7 +28,16 @@ const { data: config } = useQuery(configQuery)
 const route = useRoute()
 const router = useRouter()
 const reviewing = computed(() => (typeof route.query.review === 'string' ? route.query.review : null))
-const openReview = (cardId: string) => router.push({ query: { review: cardId } })
+const reviewDocked = ref(false)
+watch(reviewing, (id, before) => {
+  if (id === null || before) return
+  reviewDocked.value = isDesktop.value
+  if (reviewDocked.value) arranging.value = false
+}, { immediate: true })
+watch(arranging, (on) => on && reviewing.value && closeReview())
+watch(isDesktop, (desktop) => desktop || (reviewDocked.value = false))
+const isSleep = (id: string) => id === data.value?.sleep?.sleepCard.id || id === data.value?.sleep?.wakeCard.id
+const openReview = (cardId: string) => (reviewing.value ? router.replace({ query: { review: cardId } }) : router.push({ query: { review: cardId } }))
 function closeReview() {
   if (window.history.state?.back) router.back()
   else router.replace({ query: {} })
@@ -57,8 +66,11 @@ function closeStyle() {
       <p v-else-if="isError" class="p-6 text-center text-white">{{ t('common.loadFailed') }}</p>
       <CardBoard v-else-if="data && config" :dashboard="data" :layout="config.layout" @open="opened = $event" @review="openReview" />
     </main>
-    <RecentPanel v-show="!arranging" class="min-w-0 flex-[3]" @edit="editing = $event" />
+    <RecentPanel v-show="!arranging && !(reviewing && reviewDocked)" class="min-w-0 flex-[3]" @edit="editing = $event" />
     <LayoutPanel v-if="arranging && config" class="min-w-0 flex-[3]" :layout="config.layout" />
+    <aside v-if="reviewing && reviewDocked" class="relative min-w-0 flex-[3] overflow-hidden rounded-2xl bg-white shadow-lg">
+      <ReviewSheet :key="reviewing" :card-id="reviewing" :sleep="isSleep(reviewing)" docked @close="closeReview" />
+    </aside>
   </div>
   <div v-else class="dashboard min-h-dvh">
   <main
@@ -115,13 +127,7 @@ function closeStyle() {
   <EventEditor v-if="editing" :key="editing.id" :event="editing" @close="editing = null" />
   <CardBuilderSheet v-if="building" @close="building = false" />
   <StyleSheet v-if="styling" @height="styleRoom = $event" @close="closeStyle" />
-  <ReviewSheet
-    v-if="reviewing"
-    :key="reviewing"
-    :card-id="reviewing"
-    :sleep="reviewing === data?.sleep?.sleepCard.id || reviewing === data?.sleep?.wakeCard.id"
-    @close="closeReview"
-  />
+  <ReviewSheet v-if="reviewing && !reviewDocked" :key="reviewing" :card-id="reviewing" :sleep="isSleep(reviewing)" @close="closeReview" />
 </template>
 
 <style scoped>
