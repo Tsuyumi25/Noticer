@@ -14,6 +14,7 @@ import { cardCalendar, reportCounts } from './review.ts'
 import { analyzeSleep } from './sleep-analysis.ts'
 import { blocksOf, sleepEvents, SLEEP_CARD, WAKE_CARD } from './sleep.ts'
 import { allTags, cardTags, rootTags } from './tags.ts'
+import { mcpFetch } from './mcp.ts'
 
 type Env = { Variables: { db: DB; store: ConfigStore; files: AttachmentFiles } }
 
@@ -396,7 +397,8 @@ const api = new Hono<Env>()
 
 export type AppType = typeof api
 
-export function createApp(db: DB, store: ConfigStore, files: AttachmentFiles): Hono<Env> {
+export function createApp(db: DB, store: ConfigStore, files: AttachmentFiles, { mcpToken }: { mcpToken?: string } = {}): Hono<Env> {
+  const mcp = mcpFetch(db, store, mcpToken)
   return new Hono<Env>()
     .use(async (c, next) => {
       c.set('db', db)
@@ -404,5 +406,6 @@ export function createApp(db: DB, store: ConfigStore, files: AttachmentFiles): H
       c.set('files', files)
       await next()
     })
+    .all('/mcp', (c) => mcp(c.req.raw))
     .route('/', api)
 }

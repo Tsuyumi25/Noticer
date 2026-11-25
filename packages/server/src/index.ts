@@ -7,6 +7,6 @@ import { attachmentsDir, configPath, dbPath } from './paths.ts'
 
 const port = Number(process.env.PORT ?? 3040)
 
-serve({ fetch: createApp(openDb(dbPath), fileStore(configPath), new AttachmentFiles(attachmentsDir)).fetch, port }, (info) => {
+serve({ fetch: createApp(openDb(dbPath), fileStore(configPath), new AttachmentFiles(attachmentsDir), { mcpToken: process.env.NOTICER_MCP_TOKEN }).fetch, port }, (info) => {
   console.log(`Listening on http://localhost:${info.port}`)
 })
