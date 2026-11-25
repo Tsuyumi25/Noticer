@@ -4,7 +4,7 @@ import type { DailyState, DailyStrip } from 'server/rules'
 export type StripDay = { text: string; state: DailyState; grow: number }
 
 export function arrangeStrip(strip: DailyStrip, style: Pick<StripStyle, 'look' | 'side'>, shown: number) {
-  const days = strip.values
+  const days = strip.shown
     .map((value, i) => ({ text: value === null ? '' : String(value), state: strip.states[i]! }))
     .slice(-shown)
     .reverse()

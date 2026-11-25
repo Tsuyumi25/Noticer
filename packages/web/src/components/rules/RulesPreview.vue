@@ -40,7 +40,7 @@ const calendar = computed(() => {
     cells: starts.slice(0, -1).map((start, i) => {
       const day = new Date(start * 1000).getDate()
       if (!strip) return { day, ...loggedDay(start, starts[i + 1]!) }
-      const value = strip.values[i] ?? null
+      const value = strip.shown[i] ?? null
       return { day, state: strip.states[i]!, value: value === null || value === 0 ? '' : value.toFixed(decimals.value) }
     }),
   }

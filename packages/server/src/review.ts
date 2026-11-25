@@ -69,7 +69,7 @@ export function cardCalendar(config: Config, card: CardConfig, events: EventReco
     card: { id: card.id, name: card.name, emoji: card.emoji, decimals: judged ? measuredDecimals(config, card) : unit ? decimals : null },
     days: dates.map((date, i): CalendarDay => {
       const list = byDate.get(date) ?? []
-      let value: FactValue | null = strip ? strip.values[i]! : list.length || null
+      let value: FactValue | null = strip ? strip.shown[i]! : list.length || null
       let state: CalendarDay['state'] = strip ? strip.states[i]! : list.length ? 'logged' : 'none'
       let delta: number | null = null
       if (unit) {

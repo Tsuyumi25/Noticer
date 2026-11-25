@@ -115,15 +115,17 @@ describe('evaluateDays', () => {
     const events = [ev(local(18, 0, 5), ['喝咖啡']), ev(local(18, 23, 55), ['喝咖啡']), ev(local(20, 9), ['喝咖啡'])]
     expect(evaluateDays(rules({ span: 'day', measure: { kind: 'times' }, want: { kind: 'between', lo: 2, hi: 3 } }), '喝咖啡', events, now)).toEqual({
       values: [null, null, null, null, 2, 0, 1],
+      shown: [null, null, null, null, 2, 0, 1],
       states: ['none', 'none', 'none', 'none', 'good', 'danger', 'warning'],
     })
   })
 
-  it('counts days since the last event by calendar day, carrying the good ones', () => {
-    const events = [ev(local(12), ['洗車']), ev(local(16, 23), ['洗車'])]
+  it('judges by the days since the last event, but shows how many times each day had', () => {
+    const events = [ev(local(12), ['洗車']), ev(local(16, 23), ['洗車']), ev(local(16, 23, 30), ['洗車'])]
     const strip = evaluateDays(rules({ span: 'day', measure: { kind: 'since' }, want: { kind: 'atMost', n: 2 } }), '洗車', events, now)
     expect(strip?.values).toEqual([2, 3, 0, 1, 2, 3, 4])
     expect(strip?.states).toEqual(['good-carry', 'danger', 'good', 'good-carry', 'good-carry', 'danger', 'danger'])
+    expect(strip?.shown).toEqual([0, 0, 2, 0, 0, 0, 0])
   })
 
   it('looks back a week when the span is a week', () => {

@@ -24,6 +24,7 @@ export const durationBefore = (seconds: number) => DURATIONS.findLast((d) => d <
 
 export interface DailyStrip {
   values: (number | null)[]
+  shown: (number | null)[]
   states: DailyState[]
 }
 
@@ -140,6 +141,7 @@ export function evaluateDays(rules: Rules, root: string, events: EventRecord[], 
   const matched = events.filter((e) => e.eventAt <= now && matchesFind(find, root, e))
   const starts = dayStarts(now, days)
   const values: (number | null)[] = []
+  const shown: (number | null)[] = []
   const states: DailyState[] = []
   let seen = 0
   for (let i = 0; i < days; i++) {
@@ -148,6 +150,7 @@ export function evaluateDays(rules: Rules, root: string, events: EventRecord[], 
     const history = matched.slice(0, seen)
     if (history.length === 0) {
       values.push(null)
+      shown.push(null)
       states.push('none')
       continue
     }
@@ -155,7 +158,8 @@ export function evaluateDays(rules: Rules, root: string, events: EventRecord[], 
     const from = back.span === 'week' ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 6).getTime() / 1000 : start
     const value = measureValue(back.measure, history.filter((e) => e.eventAt >= from), history, start)
     values.push(value)
+    shown.push(back.measure.kind === 'since' ? history.filter((e) => e.eventAt >= start).length : value)
     states.push(judge(back, value))
   }
-  return { values, states }
+  return { values, shown, states }
 }

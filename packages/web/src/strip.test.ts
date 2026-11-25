@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { arrangeStrip } from './strip.ts'
 
 const strip = {
-  values: [2, 3, 3, 0, 1, 1],
+  values: [],
+  shown: [2, 3, 3, 0, 1, 1],
   states: ['good', 'good', 'good', 'danger', 'good', 'warning'] as const,
 }
 const texts = (groups: { text: string }[][]) => groups.map((g) => g.map((d) => d.text).join(','))
@@ -25,7 +26,7 @@ describe('arrangeStrip', () => {
   })
 
   it('drops the oldest days first when fewer fit, and gives wider numbers more room', () => {
-    const { today, groups } = arrangeStrip({ values: [5, 1800, null], states: ['good', 'good', 'none'] }, { look: 'cells', side: 'left' }, 2)
+    const { today, groups } = arrangeStrip({ values: [], shown: [5, 1800, null], states: ['good', 'good', 'none'] }, { look: 'cells', side: 'left' }, 2)
     expect(today.text).toBe('')
     expect(texts(groups)).toEqual(['1800'])
     expect(groups[0]![0]!.grow).toBeGreaterThan(today.grow)
