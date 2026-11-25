@@ -176,6 +176,17 @@ watch(
   { flush: 'post' },
 )
 
+const grab = ref<{ x: number; left: number } | null>(null)
+function startGrab(e: PointerEvent) {
+  if (e.pointerType !== 'mouse' || e.button !== 0 || !viewport.value) return
+  viewport.value.setPointerCapture(e.pointerId)
+  grab.value = { x: e.clientX, left: viewport.value.scrollLeft }
+}
+function moveGrab(e: PointerEvent) {
+  if (grab.value && viewport.value) viewport.value.scrollLeft = grab.value.left - (e.clientX - grab.value.x)
+}
+const endGrab = () => (grab.value = null)
+
 const nextSleep = computed(() => {
   const a = summary.value
   if (!a) return null
@@ -264,7 +275,17 @@ const nightLabel = computed(() => {
         </template>
       </div>
       <div class="chart" :style="{ height: `${PLOT_HEIGHT + DATE_ROW}px` }">
-        <div ref="viewport" data-hscroll class="scroller" :style="{ right: `${AXIS_WIDTH}px` }">
+        <div
+          ref="viewport"
+          data-hscroll
+          class="scroller"
+          :class="{ grabbing: grab }"
+          :style="{ right: `${AXIS_WIDTH}px` }"
+          @pointerdown="startGrab"
+          @pointermove="moveGrab"
+          @pointerup="endGrab"
+          @pointercancel="endGrab"
+        >
           <svg :width="width" :height="PLOT_HEIGHT + DATE_ROW">
             <defs>
               <linearGradient id="sleep-sky" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" :y2="PLOT_HEIGHT">
@@ -465,6 +486,15 @@ const nightLabel = computed(() => {
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
+}
+@media (pointer: fine) {
+  .scroller {
+    cursor: grab;
+    user-select: none;
+  }
+  .scroller.grabbing {
+    cursor: grabbing;
+  }
 }
 .axis {
   position: absolute;
