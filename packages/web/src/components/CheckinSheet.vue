@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { ChevronRight, Clock, Pencil, Trash2 } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api.ts'
+import { refetchAfterEventWrite } from '../eventWrites.ts'
 import { locale, t } from '../i18n/index.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
 import { PAD_ROW_COMPONENTS } from '../plugins/index.ts'
@@ -141,17 +142,7 @@ const picker = ref<InstanceType<typeof TagPicker> | null>(null)
 
 const queryClient = useQueryClient()
 function refresh() {
-  queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-  queryClient.invalidateQueries({ queryKey: ['events'] })
-  queryClient.invalidateQueries({ queryKey: ['conflicts'] })
-  queryClient.invalidateQueries({ queryKey: ['cardTags'] })
-  queryClient.invalidateQueries({ queryKey: ['cardInputs'] })
-  queryClient.invalidateQueries({ queryKey: ['media'] })
-  queryClient.invalidateQueries({ queryKey: ['days'] })
-  queryClient.invalidateQueries({ queryKey: ['search'] })
-  // Closed report sheets refetch now, so reopening one shows the change at once.
-  queryClient.invalidateQueries({ queryKey: ['calendar'], refetchType: 'all' })
-  queryClient.invalidateQueries({ queryKey: ['sleepAnalysis'], refetchType: 'all' })
+  refetchAfterEventWrite(queryClient)
   leave()
 }
 const submit = useMutation({

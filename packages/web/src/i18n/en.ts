@@ -156,6 +156,11 @@ export default {
   'journal.prevMonth': 'Previous month',
   'journal.nextMonth': 'Next month',
 
+  'event.actions': 'Entry actions',
+  'event.copy': 'Copy text',
+  'event.copied': 'Copied',
+  'event.edit': 'Edit',
+
   'review.dayEmpty': 'Nothing recorded this day',
   'review.settings': 'Card settings',
 

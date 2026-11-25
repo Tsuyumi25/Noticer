@@ -156,6 +156,11 @@ export default {
   'journal.prevMonth': '前の月',
   'journal.nextMonth': '次の月',
 
+  'event.actions': 'この記録の操作',
+  'event.copy': 'テキストをコピー',
+  'event.copied': 'コピーしました',
+  'event.edit': '編集',
+
   'review.dayEmpty': 'この日の記録はありません',
   'review.settings': 'カード設定',
 

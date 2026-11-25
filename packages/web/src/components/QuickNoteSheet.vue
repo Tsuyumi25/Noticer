@@ -4,6 +4,7 @@ import { ChevronRight, Clock, Trash2 } from 'lucide-vue-next'
 import { PURE_CARD } from 'server/pure'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '../api.ts'
+import { refetchAfterEventWrite } from '../eventWrites.ts'
 import { t } from '../i18n/index.ts'
 import { useSheetDrag } from '../sheetDrag.ts'
 import { absoluteTime, relativeTime } from '../time.ts'
@@ -97,9 +98,7 @@ const dirty = computed(
 
 const queryClient = useQueryClient()
 function refresh() {
-  for (const key of ['dashboard', 'events', 'conflicts', 'cardTags', 'rootTags', 'pure', 'media', 'search', 'days']) queryClient.invalidateQueries({ queryKey: [key] })
-  queryClient.invalidateQueries({ queryKey: ['calendar'], refetchType: 'all' })
-  queryClient.invalidateQueries({ queryKey: ['sleepAnalysis'], refetchType: 'all' })
+  refetchAfterEventWrite(queryClient)
   leave()
 }
 const submit = useMutation({

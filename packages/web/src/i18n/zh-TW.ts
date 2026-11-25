@@ -155,6 +155,11 @@ export default {
   'journal.prevMonth': '上個月',
   'journal.nextMonth': '下個月',
 
+  'event.actions': '這筆紀錄的動作',
+  'event.copy': '複製文字',
+  'event.copied': '已複製',
+  'event.edit': '編輯',
+
   'review.dayEmpty': '這天沒有紀錄',
   'review.settings': '卡片設定',
 

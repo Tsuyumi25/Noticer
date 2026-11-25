@@ -1,23 +1,18 @@
 <script setup lang="ts">
 import { useInfiniteQuery, useQuery } from '@tanstack/vue-query'
-import { CircleQuestionMark, Search, X } from 'lucide-vue-next'
-import type { CardConfig } from 'server/config'
+import { Search, X } from 'lucide-vue-next'
 import type { EventRecord } from 'server/events'
-import { PURE_CARD } from 'server/pure'
-import { parseValueKey } from 'server/values'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api.ts'
 import { t } from '../i18n/index.ts'
-import { configQuery } from '../queries.ts'
-import { clock, date, dayName, startOfDay } from '../time.ts'
+import { date, dayName, startOfDay } from '../time.ts'
 import type { ConflictEvent } from '../versions.ts'
+import EventCard from './EventCard.vue'
+import EventMenu from './EventMenu.vue'
 
 const emit = defineEmits<{ edit: [event: ConflictEvent] }>()
 
 const RECENT_DAYS = 7
-
-const { data: config } = useQuery(configQuery)
-const cards = computed(() => new Map((config.value?.cards ?? []).map((c) => [c.id, c as CardConfig])))
 
 const { data: recent, isPending: recentPending } = useQuery({
   queryKey: ['events', 'recent'],
@@ -52,17 +47,6 @@ const searching = computed(() => query.value !== '')
 const list = computed<EventRecord[] | undefined>(() => (searching.value ? search.data.value?.pages.flatMap((p) => p.events) : recent.value))
 const pending = computed(() => (searching.value ? search.isPending.value : recentPending.value))
 
-function valuesOf(event: EventRecord): string[] {
-  const card = cards.value.get(event.cardId)
-  const specs = card ? (config.value?.tagGroups[card.root]?.values ?? {}) : {}
-  return Object.entries(event.facts).flatMap(([key, value]) => {
-    const parsed = parseValueKey(key)
-    if (!parsed || typeof value !== 'number') return []
-    const decimals = specs[parsed.tag]?.decimals
-    return [`${decimals === undefined ? value : value.toFixed(decimals)}${parsed.unit}`]
-  })
-}
-
 const rows = computed(() => {
   const now = Date.now()
   let day = -1
@@ -71,17 +55,11 @@ const rows = computed(() => {
     const start = startOfDay(ms)
     const header = start !== day ? `${dayName(ms, now)}${dayName(ms, now) === date(ms) ? '' : ` · ${date(ms)}`}` : null
     day = start
-    const card = cards.value.get(event.cardId)
-    return {
-      event,
-      header,
-      emoji: event.cardId === PURE_CARD ? '📝' : (card?.emoji ?? '•'),
-      tags: event.tags.filter((tag) => tag !== card?.root),
-      values: valuesOf(event),
-      note: event.note?.split('\n')[0] ?? '',
-    }
+    return { event, header }
   })
 })
+
+const menu = ref<{ event: EventRecord; x: number; y: number } | null>(null)
 
 const end = ref<HTMLElement | null>(null)
 const observer = new IntersectionObserver((entries) => {
@@ -117,41 +95,15 @@ onUnmounted(() => observer.disconnect())
         </button>
       </label>
     </div>
-    <div class="min-h-0 flex-1 overflow-y-auto pb-2">
+    <div class="min-h-0 flex-1 overflow-y-auto bg-zinc-100 px-2 pb-2">
       <p v-if="pending" class="px-4 py-6 text-center text-sm text-zinc-400">{{ t('common.loading') }}</p>
       <p v-else-if="!rows.length" class="px-4 py-6 text-center text-sm text-zinc-400">{{ t(searching ? 'finder.noResults' : 'desktop.noRecent') }}</p>
       <template v-for="row in rows" :key="row.event.id">
-        <h3 v-if="row.header" class="sticky top-0 z-[1] bg-white/95 px-4 pt-3 pb-1 text-xs font-semibold text-zinc-500 backdrop-blur">{{ row.header }}</h3>
-        <button class="row" @click="emit('edit', row.event)">
-          <span class="font-mono text-[13px] font-semibold text-zinc-700">{{ clock(row.event.eventAt * 1000) }}</span>
-          <span class="relative text-center text-lg leading-none">
-            {{ row.emoji }}
-            <CircleQuestionMark v-if="row.event.versions.length" :size="13" :stroke-width="2.75" class="absolute -top-1 -right-1 rounded-full bg-white text-orange-500" />
-          </span>
-          <span class="flex min-w-0 gap-1 overflow-hidden">
-            <span v-for="tag in row.tags" :key="tag" class="shrink-0 rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-700">{{ tag }}</span>
-            <span v-for="v in row.values" :key="v" class="shrink-0 font-mono text-xs font-semibold text-indigo-700">{{ v }}</span>
-          </span>
-          <span class="truncate text-xs text-zinc-500">{{ row.note }}</span>
-        </button>
+        <h3 v-if="row.header" class="sticky top-0 z-[1] -mx-2 bg-zinc-100/95 px-4 pt-3 pb-1 text-xs font-semibold text-zinc-500 backdrop-blur">{{ row.header }}</h3>
+        <EventCard :event="row.event" compact @open="emit('edit', row.event)" @menu="(x, y) => (menu = { event: row.event, x, y })" />
       </template>
       <div v-if="searching" ref="end" class="h-4" />
     </div>
+    <EventMenu v-if="menu" :event="menu.event" :x="menu.x" :y="menu.y" @close="menu = null" @edit="emit('edit', menu.event)" />
   </aside>
 </template>
-
-<style scoped>
-.row {
-  display: grid;
-  grid-template-columns: 44px 26px auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  padding: 0 16px;
-  text-align: left;
-}
-.row:hover {
-  background: #f5f3ff;
-}
-</style>
