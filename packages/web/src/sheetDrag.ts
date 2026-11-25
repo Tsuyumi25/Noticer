@@ -13,11 +13,12 @@ interface SheetDragOptions {
   instant?: boolean
   centered?: boolean
   docked?: boolean
+  peek?: boolean
   onLeft?: () => void
 }
 
 /** A full-screen sheet that slides in, follows a downward pull, and slides away when asked to leave. */
-export function useSheetDrag({ onRequestClose, canDrag, instant = false, centered = false, docked = false, onLeft }: SheetDragOptions) {
+export function useSheetDrag({ onRequestClose, canDrag, instant = false, centered = false, docked = false, peek = false, onLeft }: SheetDragOptions) {
   const sheet = ref<HTMLElement | null>(null)
   const fixed = centered || docked
   const still = instant || fixed
@@ -28,6 +29,7 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false, centere
 
   // Full screen has square corners; they round only while the sheet is off its resting place.
   const sheetStyle = computed(() => {
+    if (peek) return { transform: `translateY(${offset.value}px)` }
     if (fixed) {
       const lift = Math.min(40, offset.value)
       return { transform: `translateY(${lift}px)`, opacity: 1 - lift / 40 }
@@ -108,12 +110,12 @@ export function useSheetDrag({ onRequestClose, canDrag, instant = false, centere
   }
 
   onMounted(() => {
-    if (!docked && open++ === 0) document.documentElement.style.overflow = 'hidden'
+    if (!docked && !peek && open++ === 0) document.documentElement.style.overflow = 'hidden'
     // Paint the off-screen position first so the slide-in animates.
     if (!still) requestAnimationFrame(() => requestAnimationFrame(() => (offset.value = 0)))
   })
   onUnmounted(() => {
-    if (!docked && --open === 0) document.documentElement.style.overflow = ''
+    if (!docked && !peek && --open === 0) document.documentElement.style.overflow = ''
   })
 
   return { sheet, sheetStyle, backdrop, animated, leaving, leave, settle, isLeaveEnd, onTouchStart, onTouchMove, onTouchEnd }
