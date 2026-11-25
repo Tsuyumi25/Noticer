@@ -138,6 +138,10 @@ export const stripSchema = z.object({
 
 const defaultStrip: z.infer<typeof stripSchema> = { look: 'blend', weight: 'thick', side: 'right' }
 
+export const mcpSchema = z.object({ sql: z.boolean() })
+
+const defaultMcp: z.infer<typeof mcpSchema> = { sql: false }
+
 export const configSchema = z
   .object({
     cards: z.array(cardSchema),
@@ -147,6 +151,7 @@ export const configSchema = z
     tagNotes: z.record(z.string(), z.string().trim().min(1)).default({}),
     layout: layoutSchema.default(defaultLayout),
     strip: stripSchema.default(defaultStrip),
+    mcp: mcpSchema.default(defaultMcp),
   })
   .superRefine((config, ctx) => {
     for (const card of config.cards) {
@@ -183,8 +188,9 @@ export type TagGroup = z.infer<typeof tagGroupsSchema>[number]
 export type RuleStatus = z.infer<typeof statusSchema>
 export type Layout = z.infer<typeof layoutSchema>
 export type StripStyle = z.infer<typeof stripSchema>
+export type McpSettings = z.infer<typeof mcpSchema>
 
-export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {}, tagNotes: {}, layout: defaultLayout, strip: defaultStrip }
+export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {}, tagNotes: {}, layout: defaultLayout, strip: defaultStrip, mcp: defaultMcp }
 
 /** The file as stored: card entries keep fields this app does not model yet (memo…). */
 export type RawConfig = {

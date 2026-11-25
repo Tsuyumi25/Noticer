@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { useQuery } from '@tanstack/vue-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import type { Config, McpSettings } from 'server/config'
 import { Check, ChevronRight, Plus } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api.ts'
 import CardBuilderSheet from '../components/CardBuilderSheet.vue'
 import RulesSheet from '../components/RulesSheet.vue'
+import SwitchRow from '../components/rules/SwitchRow.vue'
 import { locale, LOCALES, setLocale, t, type Locale } from '../i18n/index.ts'
 import { isDesktop } from '../viewport.ts'
+import { configQuery } from '../queries.ts'
 
 const locales = Object.entries(LOCALES) as [Locale, (typeof LOCALES)[Locale]][]
 
@@ -28,6 +31,22 @@ const building = ref(false)
 function closeCard() {
   if (window.history.state?.back) router.back()
   else router.replace({ query: {} })
+}
+
+const { data: config } = useQuery(configQuery)
+const queryClient = useQueryClient()
+const saveMcp = useMutation({
+  mutationFn: async (next: McpSettings) => {
+    const res = await api.mcp.$put({ json: next })
+    if (!res.ok) throw new Error(`mcp: ${res.status}`)
+  },
+  onError: () => queryClient.invalidateQueries({ queryKey: ['config'] }),
+})
+function toggleSql() {
+  if (!config.value) return
+  const next = { ...config.value.mcp, sql: !config.value.mcp.sql }
+  queryClient.setQueryData<Config>(['config'], (old) => old && { ...old, mcp: next })
+  saveMcp.mutate(next)
 }
 </script>
 
@@ -69,6 +88,13 @@ function closeCard() {
           </button>
         </li>
       </ul>
+    </section>
+
+    <section v-if="config" class="mt-6">
+      <h2 class="px-4 pb-1 text-sm text-zinc-500">{{ t('settings.ai') }}</h2>
+      <div class="border-y border-zinc-200 bg-white">
+        <SwitchRow :title="t('settings.mcpSql')" :hint="t('settings.mcpSqlHint')" :on="config.mcp.sql" @click="toggleSql" />
+      </div>
     </section>
 
     <CardBuilderSheet v-if="building" @close="building = false" />

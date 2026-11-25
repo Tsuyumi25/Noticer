@@ -1,4 +1,7 @@
+import { spawn } from 'node:child_process'
 import { timingSafeEqual } from 'node:crypto'
+import { once } from 'node:events'
+import { fileURLToPath } from 'node:url'
 import { createMcpHandler, localhostAllowedOrigins, McpServer, originValidationResponse } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 import type { Config, ConfigStore } from './config.ts'
@@ -14,6 +17,9 @@ import { parseValueKey } from './values.ts'
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
 const ENTRIES_DEFAULT = 100
 const ENTRIES_MAX = 500
+const SQL_SCRIPT = fileURLToPath(new URL('./sql.py', import.meta.url))
+const SQL_KILL_MS = 3000
+const SQL_MAX_CHARS = 4_000_000
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const localDay = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -74,6 +80,39 @@ function describeCard(card: CardModel, days: string[]) {
     hoursSinceLast: hours(card.nowHours),
     limitHours: hours(card.maxHours),
     ...(card.strip ? { lastSixDays: card.strip.shown.map((shown, i) => ({ date: days[i], shown, state: card.strip!.states[i] })) } : {}),
+  }
+}
+
+type SqlResult = { columns: string[]; rows: unknown[][]; truncated: boolean } | { error: string }
+
+async function runSql(path: string, sql: string): Promise<SqlResult> {
+  const child = spawn('python3', [SQL_SCRIPT, path], { timeout: SQL_KILL_MS, killSignal: 'SIGKILL' })
+  let out = ''
+  let err = ''
+  let overflow = false
+  child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+    out += chunk
+    if (out.length > SQL_MAX_CHARS && !overflow) {
+      overflow = true
+      child.kill('SIGKILL')
+    }
+  })
+  child.stderr.setEncoding('utf8').on('data', (chunk: string) => (err += chunk))
+  child.stdin.on('error', () => {})
+  child.stdin.end(sql)
+  let code: number | null
+  let signal: NodeJS.Signals | null
+  try {
+    ;[code, signal] = (await once(child, 'close')) as [number | null, NodeJS.Signals | null]
+  } catch (error) {
+    return { error: `could not start python3: ${(error as Error).message}` }
+  }
+  if (overflow) return { error: `result passed ${SQL_MAX_CHARS / 1_000_000}M characters; select fewer columns or rows` }
+  if (signal) return { error: `stopped after ${SQL_KILL_MS / 1000} s; narrow the query` }
+  try {
+    return JSON.parse(out) as SqlResult
+  } catch {
+    return { error: err.trim() || `sql runner exited with ${code}` }
   }
 }
 
@@ -207,6 +246,23 @@ function buildServer(db: DB, store: ConfigStore): McpServer {
       return json({ ...analysis, sleepsCounted: blocks.length, predictedSleepAt: predictedSleepAt === null ? null : localTime(predictedSleepAt) })
     },
   )
+
+  if (store.read().mcp.sql) {
+    server.registerTool(
+      'execute_sql',
+      {
+        title: 'Read-only SQL',
+        description:
+          "One read-only SQLite statement (SELECT or WITH) against the app's database; returns columns and rows, at most 1000 (`truncated` when there were more), and stops a query after 1 second. Writes, ATTACH and PRAGMAs other than schema ones such as pragma_table_info are refused. Tables: events (one row per entry: card_id, event_at in Unix seconds — datetime(event_at, 'unixepoch', 'localtime') gives local time —, time_offset < 0 when backdated, note), checkin_tags joined to tags_dict (an entry's tags), checkin_facts (k, value: numbers on tags keyed `tag:unit`, choices such as mood keyed by their input), checkin_attachments, event_versions (edits sent from devices). `SELECT sql FROM sqlite_master` shows the full schema. Card names, rules and fact labels are not in the database: card ids come from list_cards, and card_id `pure` is a quick note outside any card. Prefer the other tools when they already answer the question.",
+        inputSchema: z.object({ sql: z.string().trim().min(1).max(100_000) }),
+        annotations: { title: 'Read-only SQL', ...READ_ONLY },
+      },
+      async ({ sql }) => {
+        const result = await runSql(db.name, sql)
+        return 'error' in result ? fail(result.error) : json(result)
+      },
+    )
+  }
 
   return server
 }

@@ -19,8 +19,8 @@ const config = {
 }
 const TOKEN = 'fixture-token'
 
-function setup(mcpToken: string | undefined) {
-  const app = createApp(openDb(':memory:'), memoryStore(config), new AttachmentFiles(mkdtempSync(join(tmpdir(), 'noticer-mcp-'))), { mcpToken })
+function setup(mcpToken: string | undefined, db = openDb(':memory:')) {
+  const app = createApp(db, memoryStore(config), new AttachmentFiles(mkdtempSync(join(tmpdir(), 'noticer-mcp-'))), { mcpToken })
   const api = (method: string, path: string, body: unknown) =>
     app.request(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
   const rpc = (method: string, params: unknown, headers: Record<string, string> = { authorization: `Bearer ${TOKEN}` }) =>
@@ -84,5 +84,28 @@ describe('mcp', () => {
     const report = await call('card_report', { card_id: 'tea', from: today(), to: today() })
     expect(report.data.days).toEqual([{ date: today(), value: 1, delta: null, state: 'logged' }])
     expect(await call('card_report', { card_id: 'nope' })).toMatchObject({ isError: true, data: expect.stringContaining('list_cards') })
+  })
+
+  it('keeps execute_sql out until the setting is on, then answers reads and refuses writes, attach and runaway queries', async () => {
+    const db = openDb(join(mkdtempSync(join(tmpdir(), 'noticer-sql-')), 'app.db'))
+    const { api, rpc, body, call } = setup(TOKEN, db)
+    await api('POST', '/api/checkin', { cardId: 'tea', note: '午後', tags: [] })
+    const names = async () => ((await body(await rpc('tools/list', {}))).result.tools as { name: string }[]).map((t) => t.name)
+    expect(await names()).not.toContain('execute_sql')
+    expect((await api('PUT', '/api/mcp', { sql: true })).status).toBe(204)
+    expect(await names()).toContain('execute_sql')
+
+    expect((await call('execute_sql', { sql: "SELECT card_id, note FROM events WHERE card_id = 'tea'" })).data).toEqual({ columns: ['card_id', 'note'], rows: [['tea', '午後']], truncated: false })
+    expect((await call('execute_sql', { sql: 'WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n LIMIT 1001) SELECT x FROM n' })).data).toMatchObject({ truncated: true })
+    expect((await call('execute_sql', { sql: "SELECT name FROM pragma_table_info('events') LIMIT 1" })).data.rows).toEqual([['id']])
+    for (const sql of ["INSERT INTO tags_dict (name) VALUES ('x')", "DELETE FROM events", "ATTACH DATABASE ':memory:' AS other", 'PRAGMA query_only = 0']) {
+      expect(await call('execute_sql', { sql })).toMatchObject({ isError: true, data: 'not authorized' })
+    }
+    expect(await call('execute_sql', { sql: 'WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n) SELECT COUNT(*) FROM n' })).toMatchObject({ isError: true, data: expect.stringContaining('1 s') })
+    expect(await call('execute_sql', { sql: "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n LIMIT 10) SELECT printf('%.*c', 900000, 'x') FROM n" })).toMatchObject({ isError: true, data: expect.stringContaining('fewer columns or rows') })
+    expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()).toEqual({ n: 1 })
+
+    await api('PUT', '/api/mcp', { sql: false })
+    expect(await names()).not.toContain('execute_sql')
   })
 })
