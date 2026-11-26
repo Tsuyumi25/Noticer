@@ -2,14 +2,13 @@
 import { useQuery } from '@tanstack/vue-query'
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { parseValueKey } from 'server/values'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { api } from '../api.ts'
 import { locale, t } from '../i18n/index.ts'
 import { configQuery } from '../queries.ts'
 import { clock, dayKey, dayName } from '../time.ts'
 
 const props = defineProps<{ cardId: string; at: number | null }>()
-const emit = defineEmits<{ pick: [at: number | null] }>()
 
 const now = Date.now()
 const shown = new Date(props.at ?? now)
@@ -49,14 +48,16 @@ const days = computed(() => {
   return Array.from({ length }, (_, i) => new Date(m.getFullYear(), m.getMonth(), i + 1))
 })
 const today = dayKey(new Date(now))
-const selected = computed(() => dayKey(new Date(props.at ?? Date.now())))
-
-function pick(day: Date) {
-  const current = Date.now()
-  if (props.at === null && dayKey(day) === dayKey(new Date(current))) return emit('pick', null)
-  const base = new Date(props.at ?? current)
-  emit('pick', Math.min(current, new Date(day.getFullYear(), day.getMonth(), day.getDate(), base.getHours(), base.getMinutes()).getTime()))
-}
+const selected = ref(dayKey(shown))
+watch(
+  () => props.at,
+  (at) => {
+    const d = new Date(at ?? Date.now())
+    selected.value = dayKey(d)
+    month.value = new Date(d.getFullYear(), d.getMonth(), 1)
+  },
+)
+const pick = (day: Date) => (selected.value = dayKey(day))
 
 const dayEvents = computed(() =>
   (events.value ?? [])

@@ -358,7 +358,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             </template>
           </footer>
         </div>
-        <CheckinCalendar v-if="centered" :card-id="card.id" :at="happenedAt" @pick="happenedAt = $event" />
+        <CheckinCalendar v-if="centered" :key="card.id" :card-id="card.id" :at="happenedAt" />
       </section>
 
       <TimeOffsetPopup v-if="timePopup" v-model="happenedAt" @close="timePopup = false" />
