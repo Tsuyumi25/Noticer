@@ -20,7 +20,7 @@ const GAP = 10
 const ROW = CARD_H + GAP
 const HEADING = 26
 const SECTION_GAP = 16
-const GRID_MIN = 176
+const JUSTIFY = { left: 'flex-start', center: 'center', right: 'flex-end' } as const
 const FLOOR = 12
 const SLEEP_ID = 'sleep'
 
@@ -44,11 +44,10 @@ const sections = computed(() => {
     ...(sleep.value ? [{ slots: 2 }] : []),
     ...[props.dashboard.urgent, props.dashboard.others].filter((list) => list.length).map((list) => ({ slots: list.length })),
   ]
-  const columnsAt = (scale: number) => Math.max(2, Math.floor((width.value / scale + GAP) / (GRID_MIN + GAP)))
+  const columnsAt = (scale: number) => Math.max(2, Math.floor((width.value / scale + GAP) / (CARD_W + GAP)))
   const heightAt = (scale: number) =>
     parts.reduce((sum, part) => sum + HEADING + Math.ceil(part.slots / columnsAt(scale)) * ROW - GAP + SECTION_GAP, 0)
-  const scale = fitScale(height.value, heightAt, props.layout.cardScale)
-  return { scale, columns: columnsAt(scale) }
+  return { scale: Math.min(fitScale(height.value, heightAt, props.layout.cardScale), width.value / SLEEP_W) }
 })
 
 type Entry = { id: string; step: Step } & ({ kind: 'card'; card: CardModel } | { kind: 'sleep' })
@@ -208,17 +207,21 @@ onUnmounted(() => {
   <div class="relative flex h-full flex-col">
     <div ref="root" class="relative min-h-0 flex-1 overflow-hidden">
       <div v-if="!measured" />
-      <div v-else-if="layout.arrangement === 'sections'" class="origin-top-left" :style="fit(sections.scale)">
+      <div
+        v-else-if="layout.arrangement === 'sections'"
+        class="origin-top-left"
+        :style="{ ...fit(sections.scale), '--justify': JUSTIFY[layout.align], textAlign: layout.align }"
+      >
         <template v-if="sleep">
           <h2 class="section">{{ t('dashboard.sleep') }}</h2>
-          <div class="board-grid" :style="{ gridTemplateColumns: `repeat(${sections.columns}, minmax(0, 1fr))` }">
-            <SleepCard class="col-span-2" :sleep="sleep" @open="emit('open', $event)" @review="emit('review', $event)" />
+          <div class="board-row">
+            <SleepCard class="wide" :sleep="sleep" @open="emit('open', $event)" @review="emit('review', $event)" />
           </div>
         </template>
         <template v-for="part in ['urgent', 'others'] as const" :key="part">
           <template v-if="dashboard[part].length">
             <h2 class="section">{{ t(part === 'urgent' ? 'dashboard.urgent' : 'dashboard.others') }}</h2>
-            <div class="board-grid" :style="{ gridTemplateColumns: `repeat(${sections.columns}, minmax(0, 1fr))` }">
+            <div class="board-row">
               <WaterCard
                 v-for="card in dashboard[part]"
                 :key="card.id"
@@ -301,11 +304,21 @@ onUnmounted(() => {
   font-weight: 600;
   color: rgb(255 255 255 / 0.85);
 }
-.board-grid {
-  display: grid;
-  grid-auto-rows: 125px;
+.board-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: var(--justify);
   gap: 10px;
   margin-bottom: 16px;
+  text-align: left;
+}
+.board-row > * {
+  flex: none;
+  width: 186px;
+  height: 125px;
+}
+.board-row > .wide {
+  width: 382px;
 }
 .gridlines {
   position: absolute;

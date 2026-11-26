@@ -18,19 +18,15 @@ const picks = computed<Choice[]>(() => [
       { value: 'sections', label: 'layout.sections' },
     ],
   },
-  ...(props.layout.arrangement === 'stack'
-    ? [
-        {
-          field: 'align' as const,
-          label: 'layout.align' as MessageKey,
-          options: [
-            { value: 'left', label: 'layout.alignLeft' as MessageKey },
-            { value: 'center', label: 'layout.alignCenter' as MessageKey },
-            { value: 'right', label: 'layout.alignRight' as MessageKey },
-          ],
-        },
-      ]
-    : []),
+  {
+    field: 'align',
+    label: 'layout.align',
+    options: [
+      { value: 'left', label: 'layout.alignLeft' },
+      { value: 'center', label: 'layout.alignCenter' },
+      { value: 'right', label: 'layout.alignRight' },
+    ],
+  },
 ])
 
 type Scale = 'cardScale' | 'maxScale'
