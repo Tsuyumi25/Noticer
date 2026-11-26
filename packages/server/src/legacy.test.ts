@@ -145,9 +145,9 @@ describe('convertLegacyValues', () => {
 
   it('declares what each tag carries without lending a root its own, drops number facts and amount tags, and stays valid', () => {
     const parsed = configSchema.parse(config)
-    expect(parsed.tagGroups['練習']?.values).toEqual({ 鋼琴: { unit: '分鐘', decimals: 0, keep: 'sum' }, 吉他: { unit: '分鐘', decimals: 0, keep: 'sum' } })
-    expect(parsed.tagGroups['體重']?.values).toEqual({ 體重: { unit: 'kg', decimals: 1, keep: 'latest', pad: 'weight' } })
-    expect(parsed.tagGroups['澆花']).toMatchObject({ groups: [{ tags: [{ label: '多肉' }] }], values: { 澆花: { unit: 'cc', decimals: 0, keep: 'sum', default: 350 } } })
+    expect(parsed.tagGroups['練習']?.values).toEqual({ 鋼琴: { unit: '分鐘', decimals: 0 }, 吉他: { unit: '分鐘', decimals: 0 } })
+    expect(parsed.tagGroups['體重']?.values).toEqual({ 體重: { unit: 'kg', decimals: 1, pad: 'weight' } })
+    expect(parsed.tagGroups['澆花']).toMatchObject({ groups: [{ tags: [{ label: '多肉' }] }], values: { 澆花: { unit: 'cc', decimals: 0, default: 350 } } })
     expect(Object.keys(parsed.tagGroups['澆花']?.values ?? {})).toEqual(['澆花'])
     expect(parsed.tagGroups['甜點']?.groups[0]?.tags).toEqual([{ label: '糖果', emoji: '🍭' }])
     expect(parsed.cards.find((c) => c.id === 'water_plants')?.defaultTags).toEqual([])

@@ -74,8 +74,6 @@ export default {
   'sheet.keepEditing': '編集を続ける',
 
   'fact.optional': '任意',
-  'pad.sum': '合計',
-  'pad.latest': '最新',
   'pad.skip': '空欄',
   'pad.remove': '外す',
 
@@ -91,7 +89,6 @@ export default {
   'tags.unit': '単位',
   'tags.unitFor': '「{tag}」が持つ数値',
   'tags.decimals': '小数桁',
-  'tags.keep': '1日のうち',
   'tags.noValue': '数値なし',
   'tags.saveValuesFailed': '単位を保存できませんでした（{status}）',
   'tags.saveGroupsFailed': 'グループを保存できませんでした（{status}）',

@@ -35,7 +35,7 @@ repo 會公開。測試、註解、範例文字與 i18n 只能用虛構的卡片
 ```
 packages/server   Hono + zod + better-sqlite3；app.ts 匯出 AppType 給前端用 Hono RPC
 packages/web      Vue 3 + vue-router 檔案路由（src/pages）+ Tailwind v4 + TanStack Query
-data/             app.db（events）＋ config.json（卡片設定，每張卡的規則在 rules）＋ attachments/（附件原檔與縮圖）；不進版控
+data/             app.db（紀錄、tag、值，以及卡片與設定：cards／settings 存 JSON，裡面用 tag_id／unit_id）＋ attachments/（附件原檔與縮圖）；不進版控
 ```
 
 ## 指令

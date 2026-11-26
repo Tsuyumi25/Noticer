@@ -35,10 +35,9 @@ function measuredDecimals(config: Config, card: CardConfig): number | null {
   return measure && 'unit' in measure ? unitDecimals(config, card, measure.unit) : null
 }
 
-/** An unjudged card shows the last value of a unit its tags replace rather than add up, such as a weight. */
+/** An unjudged card that takes a number shows the last one recorded each day, such as a weight. */
 function shownUnit(config: Config, card: CardConfig): string | null {
-  const specs = Object.values(config.tagGroups[card.root]?.values ?? {})
-  return rootUnits(config, card.root).find((u) => specs.some((s) => s.unit === u && s.keep === 'latest')) ?? null
+  return rootUnits(config, card.root)[0] ?? null
 }
 
 export function cardCalendar(config: Config, card: CardConfig, events: EventRecord[], now: number): CardCalendar {

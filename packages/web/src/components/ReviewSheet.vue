@@ -70,8 +70,7 @@ const months = computed<Month[]>(() => {
 })
 
 function show(value: CalendarDay['value']): string {
-  if (value === null || value === false || value === 0) return ''
-  if (value === true) return '✓'
+  if (value === null || value === 0) return ''
   if (typeof value === 'number') return value.toFixed(data.value?.card.decimals ?? 0)
   return value
 }

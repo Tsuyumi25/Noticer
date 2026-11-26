@@ -74,8 +74,6 @@ export default {
   'sheet.keepEditing': 'Keep editing',
 
   'fact.optional': 'Optional',
-  'pad.sum': 'adds up',
-  'pad.latest': 'latest',
   'pad.skip': 'Skip',
   'pad.remove': 'Remove',
 
@@ -91,7 +89,6 @@ export default {
   'tags.unit': 'Unit',
   'tags.unitFor': 'What number does “{tag}” take?',
   'tags.decimals': 'Decimals',
-  'tags.keep': 'Within a day',
   'tags.noValue': 'No number',
   'tags.saveValuesFailed': "Couldn't save the unit ({status})",
   'tags.saveGroupsFailed': "Couldn't save groups ({status})",

@@ -73,8 +73,6 @@ export default {
   'sheet.keepEditing': '繼續編輯',
 
   'fact.optional': '選填',
-  'pad.sum': '加總',
-  'pad.latest': '取最新',
   'pad.skip': '不填',
   'pad.remove': '移除',
 
@@ -90,7 +88,6 @@ export default {
   'tags.unit': '單位',
   'tags.unitFor': '「{tag}」收什麼數值',
   'tags.decimals': '小數位數',
-  'tags.keep': '一天裡',
   'tags.noValue': '不收數值',
   'tags.saveValuesFailed': '儲存單位失敗（{status}）',
   'tags.saveGroupsFailed': '儲存分組失敗（{status}）',

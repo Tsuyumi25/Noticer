@@ -2,6 +2,7 @@ import { attachmentIdsOf, setAttachments, type AttachmentFiles } from './attachm
 import type { CardConfig } from './config.ts'
 import type { DB } from './db.ts'
 import type { FactRow } from './facts.ts'
+import { parseValueKey } from './values.ts'
 
 /** The tags someone picked, trimmed, without blanks or repeats. */
 export function pickedTags(picked: string[]): string[] {
@@ -21,16 +22,37 @@ interface CheckinInput {
   attachments: string[]
 }
 
-function writeTagsAndFacts(db: DB, id: number, tags: string[], facts: FactRow[]) {
-  const findTag = db.prepare<[string], { id: number }>('SELECT id FROM tags_dict WHERE name = ? ORDER BY id LIMIT 1')
+export function dictionaryIds(db: DB) {
+  const findTag = db.prepare<[string], { id: number }>('SELECT id FROM tags_dict WHERE name = ?')
   const insertTag = db.prepare('INSERT INTO tags_dict (name) VALUES (?)')
-  const linkTag = db.prepare('INSERT INTO checkin_tags (checkin_id, tag_id) VALUES (?, ?)')
-  const insertFact = db.prepare('INSERT INTO checkin_facts (checkin_id, k, type, value) VALUES (?, ?, ?, ?)')
-  for (const name of tags) {
-    const tagId = findTag.get(name)?.id ?? Number(insertTag.run(name).lastInsertRowid)
-    linkTag.run(id, tagId)
+  const findUnit = db.prepare<[string], { id: number }>('SELECT id FROM unit_dict WHERE name = ?')
+  const insertUnit = db.prepare('INSERT INTO unit_dict (name) VALUES (?)')
+  return {
+    tag: (name: string) => findTag.get(name)?.id ?? Number(insertTag.run(name).lastInsertRowid),
+    unit: (name: string) => findUnit.get(name)?.id ?? Number(insertUnit.run(name).lastInsertRowid),
   }
-  for (const f of facts) insertFact.run(id, f.k, f.type, f.type === 'integer' ? BigInt(f.value) : f.value)
+}
+
+export function writeTagsAndFacts(db: DB, id: number, tags: string[], facts: FactRow[]) {
+  const ids = dictionaryIds(db)
+  const linkTag = db.prepare('INSERT INTO checkin_tags (checkin_id, tag_id) VALUES (?, ?)')
+  const insertValue = db.prepare('INSERT INTO tag_values (link, unit_id, value) VALUES (?, ?, ?)')
+  const links = new Map<string, number>()
+  const link = (name: string) => {
+    let linkId = links.get(name)
+    if (linkId === undefined) {
+      linkId = Number(linkTag.run(id, ids.tag(name)).lastInsertRowid)
+      links.set(name, linkId)
+    }
+    return linkId
+  }
+  for (const name of tags) link(name)
+  for (const f of facts) {
+    const key = parseValueKey(f.k)
+    const value = f.type === 'integer' ? BigInt(f.value) : f.value
+    if (key) insertValue.run(link(key.tag), ids.unit(key.unit), value)
+    else insertValue.run(link(f.k), null, value)
+  }
 }
 
 export function createCheckin(
@@ -59,18 +81,11 @@ export function findEvent(db: DB, id: number): StoredEvent | undefined {
     .get(id)
 }
 
-/**
- * Replaces an event's note, time, tags, values and the given choice facts; created_at stays, so the new time becomes
- * the offset from it. Facts this app does not model (kept from the old app) survive.
- */
-export function updateCheckin(db: DB, files: AttachmentFiles, id: number, choiceKeys: string[], { note, tags, facts, timeOffset, attachments }: CheckinInput) {
+/** Replaces an event's note, time, tags and values; created_at stays, so the new time becomes the offset from it. */
+export function updateCheckin(db: DB, files: AttachmentFiles, id: number, { note, tags, facts, timeOffset, attachments }: CheckinInput) {
   const dropped = db.transaction(() => {
     db.prepare('UPDATE events SET time_offset = ?, note = ? WHERE id = ?').run(timeOffset, note, id)
     db.prepare('DELETE FROM checkin_tags WHERE checkin_id = ?').run(id)
-    db.prepare("DELETE FROM checkin_facts WHERE checkin_id = ? AND (instr(k, ':') > 0 OR k IN (SELECT value FROM json_each(?)))").run(
-      id,
-      JSON.stringify(choiceKeys),
-    )
     writeTagsAndFacts(db, id, tags, facts)
     db.prepare('DELETE FROM event_versions WHERE event_id = ?').run(id)
     return setAttachments(db, files, id, attachments)

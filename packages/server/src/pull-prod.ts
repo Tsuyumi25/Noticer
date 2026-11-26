@@ -1,10 +1,11 @@
 import { z } from 'zod'
 import { AttachmentFiles, saveUpload, setAttachments } from './attachments.ts'
 import { importRecords, recordSchema, type BackupRecord } from './backup.ts'
-import { writeConfig, type FactInput, type RawConfig } from './config.ts'
-import { convertLegacyConfig, convertLegacyValues } from './legacy.ts'
+import type { RawConfig } from './config.ts'
+import { writeDefinitions } from './configDb.ts'
+import { convertLegacyConfig, convertLegacyValues, LEGACY_INPUTS } from './legacy.ts'
 import { openDb } from './db.ts'
-import { attachmentsDir, configPath, dbPath } from './paths.ts'
+import { attachmentsDir, dbPath, resetDb } from './paths.ts'
 
 const base = process.argv[2]?.replace(/\/$/, '')
 if (!base) {
@@ -18,20 +19,6 @@ async function getJson(path: string): Promise<unknown> {
   return res.json()
 }
 
-// The old app hard-wired one input component per value; numbers become tag values, choices stay facts.
-const FACT_INPUTS: Record<string, FactInput> = {
-  mood_emoji: {
-    kind: 'choice',
-    name: '心情',
-    options: [
-      { value: '😊', label: '很好' },
-      { value: '🙂', label: '不錯' },
-      { value: '😐', label: '普通' },
-      { value: '😔', label: '不好' },
-      { value: '😵', label: '很差' },
-    ],
-  },
-}
 const COMPONENT_FACTS: Record<string, string> = {
   WeightActivityInput: 'weight_kg',
   ExerciseActivityInput: 'duration_min',
@@ -66,12 +53,13 @@ for (let from = Date.UTC(2024, 0, 1) / 1000; from < end; from += WEEK) {
 }
 
 const sorted = [...byId.values()].sort((a, b) => Date.parse(a.event_at) - Date.parse(b.event_at) || a.id - b.id)
-const legacy = convertLegacyConfig({ cards: mapped, trackersStatus, trackersPeriodic, tagGroups, factInputs: FACT_INPUTS })
+const legacy = convertLegacyConfig({ cards: mapped, trackersStatus, trackersPeriodic, tagGroups, factInputs: LEGACY_INPUTS })
 const { config, records } = convertLegacyValues(legacy, sorted)
-writeConfig(configPath, config)
-console.log(`Wrote config to ${configPath}`)
+resetDb()
 const db = openDb(dbPath)
 const count = importRecords(db, records)
+writeDefinitions(db, config)
+console.log(`Wrote the definitions into ${dbPath}`)
 console.log(`Imported ${count} events into ${dbPath}`)
 
 async function download(path: string): Promise<{ bytes: Uint8Array; type: string }> {

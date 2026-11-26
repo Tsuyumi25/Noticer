@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { BackupRecord } from './backup.ts'
-import type { BackRule, Filter, Find, NowRule, RawConfig, Rules, ValueSpec, Want } from './config.ts'
+import type { BackRule, FactInput, Filter, Find, NowRule, RawConfig, Rules, ValueSpec, Want } from './config.ts'
 import { PURE_CARD } from './pure.ts'
 import { durationBefore } from './rules.ts'
 import { valueKey } from './values.ts'
@@ -160,14 +160,31 @@ export function convertLegacyConfig(raw: unknown): RawConfig {
 
 /** Number facts the old app kept per card; `root` puts the value on the card's root tag, `tag` on the one other tag the record carries. */
 const LEGACY_NUMBERS: Record<string, { spec: ValueSpec; on: 'root' | 'tag' }> = {
-  weight_kg: { spec: { unit: 'kg', decimals: 1, keep: 'latest', pad: 'weight' }, on: 'root' },
-  duration_min: { spec: { unit: '分鐘', decimals: 0, keep: 'sum' }, on: 'tag' },
+  weight_kg: { spec: { unit: 'kg', decimals: 1, pad: 'weight' }, on: 'root' },
+  duration_min: { spec: { unit: '分鐘', decimals: 0 }, on: 'tag' },
 }
 /** Amounts the old app could only store in tag names. */
 const VOLUME_TAG = /^(\d+)cc$/
 const DOSE_TAG = /^(.+) x(\d+)$/
-const VOLUME: ValueSpec = { unit: 'cc', decimals: 0, keep: 'sum' }
-const DOSE: ValueSpec = { unit: '顆', decimals: 0, keep: 'sum' }
+const VOLUME: ValueSpec = { unit: 'cc', decimals: 0 }
+const DOSE: ValueSpec = { unit: '顆', decimals: 0 }
+
+/** The old app hard-wired one input component per value; numbers become tag values, a choice becomes a value on a tag of the input's name. */
+export const LEGACY_INPUTS: Record<string, FactInput> = {
+  mood_emoji: {
+    kind: 'choice',
+    name: '心情',
+    options: [
+      { value: '😊', label: '很好' },
+      { value: '🙂', label: '不錯' },
+      { value: '😐', label: '普通' },
+      { value: '😔', label: '不好' },
+      { value: '😵', label: '很差' },
+    ],
+  },
+}
+const LEGACY_LABEL = 'mood_label'
+const LEGACY_TEXT = 'mood_text'
 
 type RawGroups = { name: string; color: string; tags: { label: string; emoji: string }[] }[]
 
@@ -179,7 +196,12 @@ export function convertLegacyValues(raw: RawConfig, records: BackupRecord[]): { 
   const config: RawConfig = structuredClone(raw)
   config.tagGroups ??= {}
   const tagGroups = config.tagGroups
+  const known = { ...LEGACY_INPUTS, ...((config.factInputs ?? {}) as Record<string, FactInput>) }
+  const choiceTag = new Map(Object.entries(known).map(([key, input]) => [key, input.name]))
   const cards = new Map(config.cards.map((c) => [c.id, c as { id: string; name: string; root: string; facts?: string[]; defaultTags?: string[]; hiddenTags?: string[] }]))
+  const asked = new Set([...Object.keys(config.factInputs ?? {}), ...[...cards.values()].flatMap((c) => c.facts ?? [])])
+  config.factInputs = Object.fromEntries(Object.entries(known).filter(([key]) => asked.has(key)).map(([key, input]) => [choiceTag.get(key)!, input]))
+  for (const card of cards.values()) if (card.facts) card.facts = card.facts.map((k) => choiceTag.get(k) ?? k)
   const declare = (root: string, tag: string, spec: ValueSpec) => {
     const entry = (tagGroups[root] ??= { groups: [] })
     const values = (entry.values ??= {}) as Record<string, ValueSpec>
@@ -222,6 +244,7 @@ export function convertLegacyValues(raw: RawConfig, records: BackupRecord[]): { 
     const auto = new Set([card.root, card.name])
     const tags: string[] = []
     const facts: BackupRecord['facts'] = {}
+    let note = r.note
     for (const t of r.tags) {
       const volume = VOLUME_TAG.exec(t)
       const dose = DOSE_TAG.exec(t)
@@ -235,6 +258,17 @@ export function convertLegacyValues(raw: RawConfig, records: BackupRecord[]): { 
       } else tags.push(t)
     }
     for (const [k, fact] of Object.entries(r.facts)) {
+      const choice = choiceTag.get(k)
+      if (choice) {
+        facts[choice] = fact
+        if (!tags.includes(choice)) tags.push(choice)
+        continue
+      }
+      if (k === LEGACY_LABEL) continue
+      if (k === LEGACY_TEXT && fact.type === 'text') {
+        note = note ? `${note}\n\n${fact.value}` : fact.value
+        continue
+      }
       const legacy = LEGACY_NUMBERS[k]
       if (!legacy) {
         facts[k] = fact
@@ -245,7 +279,7 @@ export function convertLegacyValues(raw: RawConfig, records: BackupRecord[]): { 
       if (owner !== null) declare(root, owner, legacy.spec)
       facts[valueKey(owner ?? root, legacy.spec.unit)] = fact
     }
-    return { ...r, tags, facts }
+    return { ...r, note, tags, facts }
   })
 
   // A group whose tags carry a number lends it to members never recorded with one; a root's own value is not lent.
@@ -255,7 +289,7 @@ export function convertLegacyValues(raw: RawConfig, records: BackupRecord[]): { 
     for (const g of entry.groups as RawGroups) {
       const spec = g.tags.filter((t) => t.label !== root).map((t) => values[t.label]).find(Boolean)
       if (!spec) continue
-      for (const t of g.tags) if (t.label !== root) values[t.label] ??= { unit: spec.unit, decimals: spec.decimals, keep: spec.keep }
+      for (const t of g.tags) if (t.label !== root) values[t.label] ??= { unit: spec.unit, decimals: spec.decimals }
     }
   }
   return { config, records: converted }

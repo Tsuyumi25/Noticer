@@ -17,18 +17,18 @@ const config = {
     { id: 'skincare', name: '護膚', root: '護膚', emoji: '🧴', rules: unjudged },
     { id: 'sunscreen', name: '防曬', root: '護膚', emoji: '🌞', rules: unjudged, defaultTags: ['防曬'], hiddenTags: ['化妝水'] },
     { id: 'weight', name: '體重', root: '體重', emoji: '⚖️', rules: unjudged },
-    { id: 'practice', name: '練習', root: '練習', emoji: '🎹', rules: unjudged, facts: ['mood_emoji'] },
+    { id: 'practice', name: '練習', root: '練習', emoji: '🎹', rules: unjudged, facts: ['心情'] },
   ],
   tagGroups: {
     護膚: { emoji: '🧴', groups: [{ name: '保養項目', color: '#3b82f6', tags: [{ label: '化妝水', emoji: '🧴' }, { label: '防曬', emoji: '🌞' }] }] },
-    體重: { groups: [], values: { 體重: { unit: 'kg', decimals: 1, keep: 'latest' } } },
+    體重: { groups: [], values: { 體重: { unit: 'kg', decimals: 1 } } },
     練習: {
       groups: [{ name: '樂器', color: '#3b82f6', tags: [{ label: '鋼琴', emoji: '' }, { label: '吉他', emoji: '' }] }],
-      values: { 鋼琴: { unit: '分鐘', decimals: 0, keep: 'sum' }, 吉他: { unit: '分鐘', decimals: 0, keep: 'sum' } },
+      values: { 鋼琴: { unit: '分鐘', decimals: 0 }, 吉他: { unit: '分鐘', decimals: 0 } },
     },
   },
   factInputs: {
-    mood_emoji: { kind: 'choice', name: '心情', options: [{ value: '🙂', label: '不錯' }], required: true },
+    心情: { kind: 'choice', name: '心情', options: [{ value: '🙂', label: '不錯' }], required: true },
   },
 }
 
@@ -95,7 +95,7 @@ describe('new cards', () => {
     const judged = { ...unjudged, now: { late: { warn: 3600, danger: 7200 } } }
     await send('PUT', '/api/cards/practice/rules', judged)
     const id = await createdId(await send('POST', '/api/cards', { name: '練吉他', emoji: '🎸', root: '練習', defaultTags: ['吉他'], copyOf: 'practice' }))
-    expect(store.read().cards.find((k) => k.id === id)).toMatchObject({ facts: ['mood_emoji'], rules: judged, defaultTags: ['吉他'] })
+    expect(store.read().cards.find((k) => k.id === id)).toMatchObject({ facts: ['心情'], rules: judged, defaultTags: ['吉他'] })
     const nightId = await createdId(await send('POST', '/api/cards', { name: '晚上防曬', emoji: '🌙', root: '護膚', defaultTags: [], copyOf: 'sunscreen' }))
     const night = store.read().cards.find((k) => k.id === nightId)
     expect(night).toMatchObject({ hiddenTags: ['化妝水'] })
@@ -145,15 +145,14 @@ describe('changing a card', () => {
 describe('editing an event', () => {
   async function recorded() {
     const ctx = setup()
-    await ctx.send('POST', '/api/checkin', { cardId: 'practice', note: '早上', tags: ['鋼琴'], facts: { '鋼琴:分鐘': 20, mood_emoji: '🙂' } })
+    await ctx.send('POST', '/api/checkin', { cardId: 'practice', note: '早上', tags: ['鋼琴'], facts: { '鋼琴:分鐘': 20, 心情: '🙂' } })
     return { ...ctx, event: allEvents(ctx.db)[0]! }
   }
 
-  it('replaces note, time, tags, values and choices, keeping the card tag and facts the app does not model', async () => {
+  it('replaces note, time, tags, values and choices, keeping the card tag', async () => {
     const { db, send, event } = await recorded()
-    db.prepare("INSERT INTO checkin_facts (checkin_id, k, type, value) VALUES (?, 'mood_text', 'text', '有點睏')").run(event.id)
     const eventAt = event.eventAt - 5 * 3600
-    const res = await send('PUT', `/api/events/${event.id}`, { note: ' ', tags: ['吉他'], eventAt, facts: { '吉他:分鐘': 15, mood_emoji: '🙂' } })
+    const res = await send('PUT', `/api/events/${event.id}`, { note: ' ', tags: ['吉他'], eventAt, facts: { '吉他:分鐘': 15, 心情: '🙂' } })
     expect(res.status).toBe(204)
     expect(allEvents(db)).toEqual([
       expect.objectContaining({
@@ -161,17 +160,17 @@ describe('editing an event', () => {
         eventAt,
         timeOffset: -5 * 3600,
         note: null,
-        tags: ['練習', '吉他'],
-        facts: { '吉他:分鐘': 15, mood_emoji: '🙂', mood_text: '有點睏' },
+        tags: ['練習', '心情', '吉他'],
+        facts: { '吉他:分鐘': 15, 心情: '🙂' },
       }),
     ])
   })
 
   it('refuses a future time, values of tags the event lacks, and unknown events, leaving the event as it was', async () => {
     const { db, send, event } = await recorded()
-    const body = { note: '', tags: ['鋼琴'], eventAt: event.eventAt, facts: { mood_emoji: '🙂' } }
+    const body = { note: '', tags: ['鋼琴'], eventAt: event.eventAt, facts: { 心情: '🙂' } }
     expect((await send('PUT', `/api/events/${event.id}`, { ...body, eventAt: event.eventAt + 3600 })).status).toBe(400)
-    expect((await send('PUT', `/api/events/${event.id}`, { ...body, facts: { '吉他:分鐘': 5, mood_emoji: '🙂' } })).status).toBe(400)
+    expect((await send('PUT', `/api/events/${event.id}`, { ...body, facts: { '吉他:分鐘': 5, 心情: '🙂' } })).status).toBe(400)
     expect((await send('PUT', `/api/events/${event.id + 1}`, body)).status).toBe(404)
     expect(allEvents(db)).toEqual([event])
   })
@@ -181,20 +180,20 @@ describe('editing an event', () => {
     expect((await send('DELETE', `/api/events/${event.id}`)).status).toBe(204)
     expect((await send('DELETE', `/api/events/${event.id}`)).status).toBe(404)
     expect(allEvents(db)).toEqual([])
-    expect(db.prepare('SELECT COUNT(*) AS n FROM checkin_facts').get()).toEqual({ n: 0 })
+    expect(db.prepare('SELECT (SELECT COUNT(*) FROM checkin_tags) + (SELECT COUNT(*) FROM tag_values) AS n').get()).toEqual({ n: 0 })
   })
 })
 
 describe('events in conflict', () => {
   async function conflicted() {
     const ctx = setup()
-    await ctx.send('POST', '/api/checkin', { cardId: 'practice', note: '早上', tags: ['鋼琴'], facts: { '鋼琴:分鐘': 20, mood_emoji: '🙂' } })
+    await ctx.send('POST', '/api/checkin', { cardId: 'practice', note: '早上', tags: ['鋼琴'], facts: { '鋼琴:分鐘': 20, 心情: '🙂' } })
     const event = allEvents(ctx.db)[0]!
     const insert = ctx.db.prepare(
       'INSERT INTO event_versions (event_id, device, edited_at, shown, deleted, event_at, note, tags, facts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     )
     insert.run(event.id, '平板', 200, 0, 1, null, null, '[]', '{}')
-    insert.run(event.id, '手機', 100, 1, 0, event.eventAt, '早上', '["練習","鋼琴"]', '{"鋼琴:分鐘":20,"mood_emoji":"🙂"}')
+    insert.run(event.id, '手機', 100, 1, 0, event.eventAt, '早上', '["練習","鋼琴"]', '{"鋼琴:分鐘":20,"心情":"🙂"}')
     return { ...ctx, event }
   }
   const conflicts = async (send: ReturnType<typeof setup>['send']) => (await send('GET', '/api/conflicts')).json() as Promise<{ id: number; versions: unknown[] }[]>
@@ -203,10 +202,10 @@ describe('events in conflict', () => {
     const { db, send, event } = await conflicted()
     expect((await conflicts(send)).map((e) => e.id)).toEqual([event.id])
     expect(allEvents(db)[0]!.versions).toEqual([
-      expect.objectContaining({ device: '手機', shown: true, deleted: false, note: '早上', tags: ['練習', '鋼琴'], facts: { '鋼琴:分鐘': 20, mood_emoji: '🙂' } }),
+      expect.objectContaining({ device: '手機', shown: true, deleted: false, note: '早上', tags: ['練習', '鋼琴'], facts: { '鋼琴:分鐘': 20, 心情: '🙂' } }),
       expect.objectContaining({ device: '平板', shown: false, deleted: true, eventAt: null }),
     ])
-    await send('PUT', `/api/events/${event.id}`, { note: '早上', tags: ['鋼琴'], eventAt: event.eventAt, facts: { '鋼琴:分鐘': 25, mood_emoji: '🙂' } })
+    await send('PUT', `/api/events/${event.id}`, { note: '早上', tags: ['鋼琴'], eventAt: event.eventAt, facts: { '鋼琴:分鐘': 25, 心情: '🙂' } })
     expect(await conflicts(send)).toEqual([])
     expect(allEvents(db)[0]!.versions).toEqual([])
   })
@@ -382,40 +381,51 @@ describe('values', () => {
   const post = (send: ReturnType<typeof setup>['send'], cardId: string, tags: string[], facts: Record<string, unknown>) =>
     send('POST', '/api/checkin', { cardId, note: '', tags, facts })
 
-  it('stores a value under tag:unit, as a real when the tag takes decimals, and choices as text', async () => {
+  it('stores each value on its tag on the event with a unit from the dictionary, a real when the tag takes decimals, and a choice on a tag of its own without a unit', async () => {
     const { db, send } = setup()
     await post(send, 'weight', [], { '體重:kg': 50 })
-    await post(send, 'practice', ['鋼琴', '吉他'], { '鋼琴:分鐘': 20, '吉他:分鐘': 10, mood_emoji: '🙂' })
-    expect(db.prepare('SELECT k, type, typeof(value) AS stored, value FROM checkin_facts ORDER BY checkin_id, k').all()).toEqual([
-      { k: '體重:kg', type: 'real', stored: 'real', value: 50 },
-      { k: 'mood_emoji', type: 'text', stored: 'text', value: '🙂' },
-      { k: '吉他:分鐘', type: 'integer', stored: 'integer', value: 10 },
-      { k: '鋼琴:分鐘', type: 'integer', stored: 'integer', value: 20 },
+    await post(send, 'practice', ['鋼琴', '吉他'], { '鋼琴:分鐘': 20, '吉他:分鐘': 10, 心情: '🙂' })
+    expect(
+      db
+        .prepare(
+          `SELECT ct.checkin_id AS event, t.name AS tag, u.name AS unit, typeof(v.value) AS stored, v.value
+           FROM tag_values v JOIN checkin_tags ct ON ct.id = v.link JOIN tags_dict t ON t.id = ct.tag_id LEFT JOIN unit_dict u ON u.id = v.unit_id
+           ORDER BY v.id`,
+        )
+        .all(),
+    ).toEqual([
+      { event: 1, tag: '體重', unit: 'kg', stored: 'real', value: 50 },
+      { event: 2, tag: '鋼琴', unit: '分鐘', stored: 'integer', value: 20 },
+      { event: 2, tag: '吉他', unit: '分鐘', stored: 'integer', value: 10 },
+      { event: 2, tag: '心情', unit: null, stored: 'text', value: '🙂' },
     ])
+    expect(allEvents(db)[1]?.tags).toEqual(['練習', '鋼琴', '吉他', '心情'])
   })
 
   it('rejects extra decimals, negatives, other units, tags the event lacks, and other cards’ values', async () => {
     const { db, send } = setup()
     expect((await post(send, 'weight', [], { '體重:kg': 50.25 })).status).toBe(400)
     expect((await post(send, 'weight', [], { '體重:kg': -1 })).status).toBe(400)
-    expect((await post(send, 'practice', ['鋼琴'], { '鋼琴:首': 3, mood_emoji: '🙂' })).status).toBe(400)
-    expect((await post(send, 'practice', [], { '鋼琴:分鐘': 20, mood_emoji: '🙂' })).status).toBe(400)
+    expect((await post(send, 'practice', ['鋼琴'], { '鋼琴:首': 3, 心情: '🙂' })).status).toBe(400)
+    expect((await post(send, 'practice', [], { '鋼琴:分鐘': 20, 心情: '🙂' })).status).toBe(400)
     expect((await post(send, 'weight', ['鋼琴'], { '鋼琴:分鐘': 20 })).status).toBe(400)
-    expect((await post(send, 'practice', ['鋼琴'], { mood_emoji: '🙂' })).status).toBe(201)
+    expect((await post(send, 'practice', ['鋼琴'], { 心情: '🙂' })).status).toBe(201)
     expect(allEvents(db)).toHaveLength(1)
   })
 
-  it('defaults a replacing value to the latest by when it happened, and opens the keypad when it seldom stays the same', async () => {
+  it('defaults a value that keeps changing to the latest by when it happened, offers no usual amounts, and opens the keypad', async () => {
     const { send } = setup()
     await post(send, 'weight', [], { '體重:kg': 50.4 })
-    await send('POST', '/api/checkin', { cardId: 'weight', note: '', tags: [], facts: { '體重:kg': 53 }, timeOffset: -86400 })
+    for (const [i, kg] of [50.6, 50.1, 50.9, 51].entries()) {
+      await send('POST', '/api/checkin', { cardId: 'weight', note: '', tags: [], facts: { '體重:kg': kg }, timeOffset: -86400 * (i + 1) })
+    }
     const { values } = await (await send('GET', '/api/cards/weight/inputs')).json()
     expect(values).toEqual([expect.objectContaining({ tag: '體重', unit: 'kg', auto: true, default: 50.4, candidates: [], open: true })])
   })
 
   it('defaults an adding value to its most frequent one, lends a tag without history the same unit’s values, and opens no keypad for tags the card does not attach', async () => {
     const { send } = setup()
-    for (const v of [20, 20, 10, 20]) await post(send, 'practice', ['鋼琴'], { '鋼琴:分鐘': v, mood_emoji: '🙂' })
+    for (const v of [20, 20, 10, 20]) await post(send, 'practice', ['鋼琴'], { '鋼琴:分鐘': v, 心情: '🙂' })
     const { values } = await (await send('GET', '/api/cards/practice/inputs')).json()
     expect(values).toEqual([
       expect.objectContaining({ tag: '鋼琴', auto: false, default: 20, candidates: [20, 10], open: false }),

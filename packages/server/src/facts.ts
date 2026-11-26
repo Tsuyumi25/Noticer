@@ -12,7 +12,7 @@ export type ValueInput = Omit<ValueSpec, 'default'> & {
   auto: boolean
   /** The default the settings fix, if any. */
   pinned?: number
-  /** What the sheet puts in: the pinned default, else the latest value for `latest`, else the most frequent one. */
+  /** What the sheet puts in: the pinned default, else the usual amount when one keeps coming back, else the latest value. */
   default: number | null
   /** Values worth one tap: this tag's own frequent ones first, then other tags' in the same unit. */
   candidates: number[]
@@ -30,6 +30,7 @@ export interface CardInputs {
 
 const RECENT = 200
 const SETTLED = 30
+const USUAL = 0.3
 
 function byCount(values: number[]): number[] {
   const counts = new Map<number, number>()
@@ -37,23 +38,17 @@ function byCount(values: number[]): number[] {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v)
 }
 
-/** How often the default would have gone out unchanged: the previous value for `latest`, the fixed default for `sum`. */
-function keptShare(spec: ValueSpec, own: number[], fallback: number | null): number {
-  const recent = own.slice(0, SETTLED)
-  if (spec.keep === 'latest') {
-    const pairs = recent.slice(0, -1).map((v, i) => v === recent[i + 1])
-    return pairs.length ? pairs.filter(Boolean).length / pairs.length : 0
-  }
-  return recent.length ? recent.filter((v) => v === fallback).length / recent.length : 0
-}
+const share = (values: number[], of: number | null) => (values.length ? values.filter((v) => v === of).length / values.length : 0)
 
 export function cardInputs(db: DB, config: Config, card: CardConfig): CardInputs {
   const root = card.root
   const specs = Object.entries(config.tagGroups[root]?.values ?? {})
   const rows = db
     .prepare<[string], { k: string; value: number }>(
-      `SELECT f.k, f.value FROM checkin_facts f JOIN events e ON e.id = f.checkin_id
-       WHERE EXISTS (SELECT 1 FROM checkin_tags ct JOIN tags_dict t ON t.id = ct.tag_id WHERE ct.checkin_id = e.id AND t.name = ?)
+      `SELECT t.name || ':' || u.name AS k, v.value
+       FROM tag_values v JOIN unit_dict u ON u.id = v.unit_id JOIN checkin_tags ct ON ct.id = v.link JOIN tags_dict t ON t.id = ct.tag_id
+       JOIN events e ON e.id = ct.checkin_id
+       WHERE EXISTS (SELECT 1 FROM checkin_tags r JOIN tags_dict rt ON rt.id = r.tag_id WHERE r.checkin_id = e.id AND rt.name = ?)
        ORDER BY e.event_at DESC, e.id DESC`,
     )
     .all(root)
@@ -68,9 +63,11 @@ export function cardInputs(db: DB, config: Config, card: CardConfig): CardInputs
   const values = specs.map(([tag, spec]): ValueInput => {
     const own = recent.get(valueKey(tag, spec.unit)) ?? []
     const pool = specs.filter(([t, s]) => t !== tag && s.unit === spec.unit).flatMap(([t, s]) => recent.get(valueKey(t, s.unit)) ?? [])
+    const settled = own.slice(0, SETTLED)
     const frequent = byCount(own)
-    const fallback = spec.default ?? (spec.keep === 'latest' ? (own[0] ?? null) : (frequent[0] ?? byCount(pool)[0] ?? null))
-    const candidates = spec.keep === 'latest' ? [] : [...new Set([...frequent.slice(0, 4), ...byCount(pool)])].slice(0, 4)
+    const usual = own.length === 0 || share(settled, frequent[0] ?? null) >= USUAL
+    const fallback = spec.default ?? (usual ? (frequent[0] ?? byCount(pool)[0] ?? null) : own[0]!)
+    const candidates = usual ? [...new Set([...frequent.slice(0, 4), ...byCount(pool)])].slice(0, 4) : []
     const { default: pinned, ...rest } = spec
     return {
       ...rest,
@@ -79,7 +76,7 @@ export function cardInputs(db: DB, config: Config, card: CardConfig): CardInputs
       auto: tag === root,
       default: fallback,
       candidates,
-      open: tag === root && (own.length === 0 || keptShare(spec, own, fallback) < 0.5),
+      open: tag === root && (own.length === 0 || share(settled, fallback) < 0.5),
     }
   })
   const choices = (card.facts ?? []).map((key) => ({ ...config.factInputs[key]!, key }))

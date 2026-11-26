@@ -2,8 +2,10 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS tags_dict (
   id    INTEGER PRIMARY KEY AUTOINCREMENT,
-  name  TEXT NOT NULL,
-  color TEXT
+  name  TEXT NOT NULL UNIQUE,
+  emoji TEXT NOT NULL DEFAULT '',
+  color TEXT,
+  note  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -20,30 +22,28 @@ CREATE INDEX IF NOT EXISTS idx_events_created_at ON events (created_at);
 CREATE INDEX IF NOT EXISTS idx_events_card_id ON events (card_id);
 
 CREATE TABLE IF NOT EXISTS checkin_tags (
+  id         INTEGER PRIMARY KEY,
   checkin_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   tag_id     INTEGER NOT NULL REFERENCES tags_dict(id) ON DELETE RESTRICT,
-  PRIMARY KEY (checkin_id, tag_id)
-);
+  UNIQUE (checkin_id, tag_id)
+) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_checkin_tags_tag_id ON checkin_tags (tag_id);
-CREATE INDEX IF NOT EXISTS idx_checkin_tags_checkin_id ON checkin_tags (checkin_id);
 
-CREATE TABLE IF NOT EXISTS checkin_facts (
-  checkin_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  k          TEXT    NOT NULL,
-  type       TEXT    NOT NULL CHECK (type IN ('text','integer','real','boolean')),
-  value      ANY     NOT NULL,
-  PRIMARY KEY (checkin_id, k),
-  CHECK (
-    (type = 'text'    AND typeof(value) = 'text') OR
-    (type = 'integer' AND typeof(value) = 'integer') OR
-    (type = 'real'    AND typeof(value) IN ('real','integer')) OR
-    (type = 'boolean' AND typeof(value) = 'integer' AND value IN (0,1))
-  )
-) STRICT, WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS unit_dict (
+  id   INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE
+) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_checkin_facts_k ON checkin_facts (k);
-CREATE INDEX IF NOT EXISTS idx_checkin_facts_k_type ON checkin_facts (k, type);
+CREATE TABLE IF NOT EXISTS tag_values (
+  id      INTEGER PRIMARY KEY,
+  link    INTEGER NOT NULL REFERENCES checkin_tags(id) ON DELETE CASCADE,
+  unit_id INTEGER REFERENCES unit_dict(id) ON DELETE RESTRICT,
+  value   ANY NOT NULL CHECK (typeof(value) IN ('integer', 'real', 'text'))
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_tag_values_link ON tag_values (link);
+CREATE INDEX IF NOT EXISTS idx_tag_values_unit_id ON tag_values (unit_id);
 
 -- Any file kept with an event; its bytes sit in the attachments folder under `id`, and a thumbnail the browser drew
 -- under `id.thumb` when `thumb` is 1; `width`/`height` are a picture's or video's pixels when known. An upload belongs
@@ -77,3 +77,16 @@ CREATE TABLE IF NOT EXISTS event_versions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_versions_event_id ON event_versions (event_id);
+
+CREATE TABLE IF NOT EXISTS cards (
+  id       TEXT PRIMARY KEY,
+  position INTEGER NOT NULL,
+  def      TEXT NOT NULL CHECK (json_valid(def))
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL CHECK (json_valid(value))
+) STRICT;
+
+PRAGMA user_version = 2;

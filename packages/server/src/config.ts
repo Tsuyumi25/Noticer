@@ -1,4 +1,3 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { z } from 'zod'
 import { PURE_CARD } from './pure.ts'
 
@@ -104,11 +103,10 @@ export const tagGroupsSchema = z
 /** Keypad rows that replace the usual amounts for one kind of number; the web app holds their components. */
 export const PAD_ROWS = ['weight'] as const
 
-/** A number a tag carries in a root's events: `sum` values add up over a day, `latest` ones replace each other. */
+/** A number a tag carries in a root's events: what the sheet's keypad offers. */
 export const valueSpecSchema = z.object({
   unit: z.string().trim().min(1).regex(/^[^:]+$/),
   decimals: z.number().int().min(0).max(3),
-  keep: z.enum(['sum', 'latest']),
   default: z.number().min(0).optional(),
   pad: z.enum(PAD_ROWS).optional(),
 })
@@ -192,7 +190,7 @@ export type McpSettings = z.infer<typeof mcpSchema>
 
 export const emptyConfig: Config = { cards: [], tagGroups: {}, factInputs: {}, tagNotes: {}, layout: defaultLayout, strip: defaultStrip, mcp: defaultMcp }
 
-/** The file as stored: card entries keep fields this app does not model yet (memo…). */
+/** The definitions as edited: card entries keep fields this app does not model yet (memo…). */
 export type RawConfig = {
   cards: Array<{ id: string } & Record<string, unknown>>
   tagGroups?: Record<string, { emoji?: string; groups: unknown; values?: Record<string, unknown> }>
@@ -200,30 +198,8 @@ export type RawConfig = {
 
 export interface ConfigStore {
   read(): Config
-  /** Applies an edit to the raw file content, validates it, and persists it. */
+  /** Applies an edit to the raw definitions, validates the whole, and persists it. */
   update(edit: (raw: RawConfig) => void): Config
-}
-
-export function readConfig(path: string): Config {
-  if (!existsSync(path)) return emptyConfig
-  return configSchema.parse(JSON.parse(readFileSync(path, 'utf8')))
-}
-
-export function writeConfig(path: string, raw: unknown): Config {
-  const config = configSchema.parse(raw)
-  writeFileSync(path, JSON.stringify(raw, null, 2))
-  return config
-}
-
-export function fileStore(path: string): ConfigStore {
-  return {
-    read: () => readConfig(path),
-    update(edit) {
-      const raw: RawConfig = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : structuredClone(emptyConfig)
-      edit(raw)
-      return writeConfig(path, raw)
-    },
-  }
 }
 
 export function memoryStore(initial: unknown): ConfigStore {

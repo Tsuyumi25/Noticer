@@ -98,20 +98,20 @@ const tagSettingsBody = z.object({ hiddenTags: z.array(z.string()), defaultTags:
 
 const tagNoteBody = z.object({ note: z.string() })
 
-type Write = { ok: true; tags: string[]; rows: FactRow[]; choiceKeys: string[] } | { ok: false; status: 400 | 404 | 422; error: string }
+type Write = { ok: true; tags: string[]; rows: FactRow[] } | { ok: false; status: 400 | 404 | 422; error: string }
 
 /** What a checkin through this card writes; a quick note writes only the tags picked and takes no values. */
 function resolveWrite(config: Config, cardId: string, tags: string[], facts: Record<string, number | string>): Write {
   if (cardId === PURE_CARD) {
     if (Object.keys(facts).length > 0) return { ok: false, status: 400, error: 'a quick note takes no values' }
-    return { ok: true, tags: pickedTags(tags), rows: [], choiceKeys: [] }
+    return { ok: true, tags: pickedTags(tags), rows: [] }
   }
   const card = config.cards.find((k) => k.id === cardId)
   if (!card) return { ok: false, status: 404, error: `unknown card ${cardId}` }
   const written = checkinTags(card, tags)
   const read = readFacts(config, card, facts, written)
   if (!read.ok) return read
-  return { ok: true, tags: written, rows: read.rows, choiceKeys: card.facts ?? [] }
+  return { ok: true, tags: written, rows: read.rows }
 }
 
 const api = new Hono<Env>()
@@ -166,7 +166,7 @@ const api = new Hono<Env>()
     const unknown = unknownAttachments(c.var.db, attachments, id)
     if (unknown.length) return c.json({ error: `unknown attachments ${unknown.join(', ')}` }, 400)
     const trimmed = note.trim()
-    updateCheckin(c.var.db, c.var.files, id, write.choiceKeys, {
+    updateCheckin(c.var.db, c.var.files, id, {
       note: trimmed === '' ? null : trimmed,
       tags: write.tags,
       facts: write.rows,

@@ -11,11 +11,11 @@ const unjudged = { find: { match: 'all', blocks: [] }, now: {}, back: null } as 
 const config = {
   ...emptyConfig,
   cards: [
-    { id: 'practice', name: '練習', root: '練習', emoji: '🎹', rules: unjudged, facts: ['mood_emoji'] },
+    { id: 'practice', name: '練習', root: '練習', emoji: '🎹', rules: unjudged, facts: ['心情'] },
     { id: 'tea', name: '喝茶', root: '喝茶', emoji: '🍵', rules: unjudged },
   ],
-  tagGroups: { 練習: { groups: [], values: { 鋼琴: { unit: '分鐘', decimals: 0, keep: 'sum' } } } },
-  factInputs: { mood_emoji: { kind: 'choice', name: '心情', options: [{ value: '🙂', label: '不錯' }] } },
+  tagGroups: { 練習: { groups: [], values: { 鋼琴: { unit: '分鐘', decimals: 0 } } } },
+  factInputs: { 心情: { kind: 'choice', name: '心情', options: [{ value: '🙂', label: '不錯' }] } },
 }
 const TOKEN = 'fixture-token'
 
@@ -65,12 +65,12 @@ describe('mcp', () => {
 
   it('lists entries with their card, numbers, choices and note, narrows by card, and says how to fetch the rest', async () => {
     const { api, call } = setup(TOKEN)
-    await api('POST', '/api/checkin', { cardId: 'practice', note: '晚上', tags: ['鋼琴'], facts: { '鋼琴:分鐘': 25, mood_emoji: '🙂' } })
+    await api('POST', '/api/checkin', { cardId: 'practice', note: '晚上', tags: ['鋼琴'], facts: { '鋼琴:分鐘': 25, 心情: '🙂' } })
     await api('POST', '/api/checkin', { cardId: 'tea', note: '', tags: [] })
     await api('POST', '/api/checkin', { cardId: 'tea', note: '', tags: [] })
     const all = await call('list_entries', { from: today(), to: today() })
     expect(all.data.total).toBe(3)
-    expect(all.data.entries[0]).toMatchObject({ card: '練習', tags: ['鋼琴'], values: { 鋼琴: '25 分鐘' }, choices: { 心情: '🙂 不錯' }, note: '晚上' })
+    expect(all.data.entries[0]).toMatchObject({ card: '練習', tags: ['鋼琴', '心情'], values: { 鋼琴: '25 分鐘' }, choices: { 心情: '🙂 不錯' }, note: '晚上' })
     const tea = await call('list_entries', { from: today(), to: today(), card_id: 'tea', limit: 1 })
     expect(tea.data).toMatchObject({ total: 2, more: expect.stringContaining('offset 1') })
     expect(tea.data.entries).toEqual([expect.objectContaining({ card: '喝茶', tags: [] })])

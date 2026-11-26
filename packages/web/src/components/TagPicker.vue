@@ -256,11 +256,11 @@ async function saveNote() {
 }
 
 // ---------- values ----------
-const unitSheet = ref<{ tag: string; unit: string; decimals: number; keep: ValueSpec['keep'] } | null>(null)
+const unitSheet = ref<{ tag: string; unit: string; decimals: number } | null>(null)
 
 function openUnit(tag: string) {
   const spec = specOf.value.get(tag)
-  unitSheet.value = { tag, unit: spec?.unit ?? '', decimals: spec?.decimals ?? 0, keep: spec?.keep ?? 'sum' }
+  unitSheet.value = { tag, unit: spec?.unit ?? '', decimals: spec?.decimals ?? 0 }
 }
 
 async function saveValues(tag: string, spec: ValueSpec | null) {
@@ -269,7 +269,7 @@ async function saveValues(tag: string, spec: ValueSpec | null) {
   if (!root) return
   const values: Record<string, ValueSpec> = {}
   for (const v of props.values ?? []) {
-    values[v.tag] = { unit: v.unit, decimals: v.decimals, keep: v.keep, ...(v.pinned === undefined ? {} : { default: v.pinned }), ...(v.pad ? { pad: v.pad } : {}) }
+    values[v.tag] = { unit: v.unit, decimals: v.decimals, ...(v.pinned === undefined ? {} : { default: v.pinned }), ...(v.pad ? { pad: v.pad } : {}) }
   }
   if (spec) values[tag] = spec
   else delete values[tag]
@@ -285,7 +285,6 @@ function confirmUnit() {
   saveValues(u.tag, {
     unit: u.unit.trim(),
     decimals: u.decimals,
-    keep: u.keep,
     ...(kept?.pinned === undefined ? {} : { default: kept.pinned }),
     ...(kept?.pad ? { pad: kept.pad } : {}),
   })
@@ -475,12 +474,6 @@ onBeforeUnmount(() => {
           <p class="mt-3 mb-1.5 text-sm text-zinc-500">{{ t('tags.decimals') }}</p>
           <div class="seg">
             <button v-for="d in [0, 1, 2]" :key="d" type="button" :class="{ on: unitSheet.decimals === d }" @click="unitSheet.decimals = d">{{ d }}</button>
-          </div>
-          <p class="mt-3 mb-1.5 text-sm text-zinc-500">{{ t('tags.keep') }}</p>
-          <div class="seg">
-            <button v-for="k in ['sum', 'latest'] as const" :key="k" type="button" :class="{ on: unitSheet.keep === k }" @click="unitSheet.keep = k">
-              {{ t(k === 'sum' ? 'pad.sum' : 'pad.latest') }}
-            </button>
           </div>
           <button type="submit" class="close primary">{{ t('common.ok') }}</button>
           <button v-if="specOf.has(unitSheet.tag)" type="button" class="close danger" @click="saveValues(unitSheet.tag, null); unitSheet = null">{{ t('tags.noValue') }}</button>

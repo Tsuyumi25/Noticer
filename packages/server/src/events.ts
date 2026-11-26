@@ -1,7 +1,7 @@
 import type { Attachment } from './attachments.ts'
 import type { DB } from './db.ts'
 
-export type FactValue = string | number | boolean
+export type FactValue = string | number
 
 export interface EventRecord {
   id: number
@@ -39,16 +39,17 @@ interface EventRow {
   versions: string
 }
 
-type FactPair = ['text' | 'integer' | 'real' | 'boolean', string | number]
-
 const eventColumns = `
   SELECT e.id, e.card_id, e.event_at, e.time_offset, e.note,
     (SELECT json_group_array(name) FROM (
        SELECT t.name FROM checkin_tags ct JOIN tags_dict t ON t.id = ct.tag_id
        WHERE ct.checkin_id = e.id ORDER BY t.id
     )) AS tags,
-    (SELECT json_group_object(f.k, json_array(f.type, f.value))
-       FROM checkin_facts f WHERE f.checkin_id = e.id) AS facts,
+    (SELECT json_group_object(k, value) FROM (
+       SELECT iif(u.name IS NULL, t.name, t.name || ':' || u.name) AS k, v.value
+       FROM checkin_tags ct JOIN tags_dict t ON t.id = ct.tag_id JOIN tag_values v ON v.link = ct.id LEFT JOIN unit_dict u ON u.id = v.unit_id
+       WHERE ct.checkin_id = e.id ORDER BY t.id, v.id
+    )) AS facts,
     (SELECT json_group_array(json_object('id', id, 'name', name, 'type', type, 'size', size, 'thumb', json(iif(thumb, 'true', 'false')), 'width', width, 'height', height))
        FROM (SELECT * FROM checkin_attachments a WHERE a.checkin_id = e.id ORDER BY a.sort_order)) AS attachments,
     (SELECT json_group_array(json_object('id', id, 'device', device, 'editedAt', edited_at, 'shown', json(iif(shown, 'true', 'false')),
@@ -143,12 +144,7 @@ function toRecord(row: EventRow): EventRecord {
     timeOffset: row.time_offset,
     note: row.note,
     tags: JSON.parse(row.tags) as string[],
-    facts: Object.fromEntries(
-      Object.entries(JSON.parse(row.facts) as Record<string, FactPair>).map(([k, [type, value]]) => [
-        k,
-        type === 'boolean' ? value === 1 : value,
-      ]),
-    ),
+    facts: JSON.parse(row.facts) as Record<string, FactValue>,
     attachments: JSON.parse(row.attachments) as Attachment[],
     versions: JSON.parse(row.versions) as EventVersion[],
   }

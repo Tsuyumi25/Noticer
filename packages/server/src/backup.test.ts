@@ -18,7 +18,7 @@ const records: BackupRecord[] = [
     time_offset: 0,
     note: null,
     tags: ['作息', '起床', '起床'],
-    facts: { mood_label: { type: 'text', value: '不錯' } },
+    facts: { 心情: { type: 'text', value: '🙂' } },
   },
   {
     id: 11,
@@ -29,9 +29,9 @@ const records: BackupRecord[] = [
     note: '早上',
     tags: ['體重'],
     facts: {
-      weight_kg: { type: 'real', value: 53 },
-      reps: { type: 'integer', value: 12 },
-      fasted: { type: 'boolean', value: true },
+      '體重:kg': { type: 'real', value: 53 },
+      '體重:次': { type: 'integer', value: 12 },
+      空腹: { type: 'boolean', value: true },
     },
   },
   {
@@ -55,19 +55,20 @@ async function fetchEvents(db: DB, from: number, to: number) {
 }
 
 describe('record import', () => {
-  it('round-trips records into the half-open day range with offsets, tags and typed facts', async () => {
+  it('round-trips records into the half-open day range with offsets, and puts each value on its tag, adding the tag a unitless one names', async () => {
     const db = openDb(':memory:')
     expect(importRecords(db, records)).toBe(3)
 
     const { body } = await fetchEvents(db, dayStart, dayEnd)
 
     expect(body.map((e) => e.id)).toEqual([10, 11])
-    expect(body[0]?.tags).toEqual(['作息', '起床'])
+    expect(body[0]).toMatchObject({ tags: ['作息', '起床', '心情'], facts: { 心情: '🙂' } })
     expect(body[1]).toMatchObject({
       eventAt: Date.parse('2026-06-01T08:30:00+08:00') / 1000,
       timeOffset: -1800,
       note: '早上',
-      facts: { weight_kg: 53, reps: 12, fasted: true },
+      tags: ['體重', '空腹'],
+      facts: { '體重:kg': 53, '體重:次': 12, 空腹: 1 },
     })
   })
 

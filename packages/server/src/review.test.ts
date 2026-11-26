@@ -15,11 +15,11 @@ const config: Config = {
   cards: [
     { id: 'coffee', name: '喝咖啡', root: '喝咖啡', emoji: '☕', rules: { ...unjudged, back: { span: 'day', measure: { kind: 'times' }, want: { kind: 'atLeast', n: 2 } } } },
     { id: 'weight', name: '體重', root: '體重', emoji: '⚖️', rules: unjudged },
-    { id: 'today', name: '今日', root: '今日', emoji: '📔', rules: unjudged, facts: ['mood_emoji'] },
+    { id: 'today', name: '今日', root: '今日', emoji: '📔', rules: unjudged, facts: ['心情'] },
   ],
-  tagGroups: { 體重: { groups: [], values: { 體重: { unit: 'kg', decimals: 1, keep: 'latest' } } } },
+  tagGroups: { 體重: { groups: [], values: { 體重: { unit: 'kg', decimals: 1 } } } },
   factInputs: {
-    mood_emoji: { kind: 'choice', name: '心情', options: [{ value: '🙂', label: '不錯' }] },
+    心情: { kind: 'choice', name: '心情', options: [{ value: '🙂', label: '不錯' }] },
   },
 }
 const card = (id: string) => config.cards.find((c) => c.id === id)!
@@ -57,7 +57,7 @@ describe('cardCalendar', () => {
   })
 
   it('shows the chosen option instead of a count when the card has a choice fact', () => {
-    const { days } = cardCalendar(config, card('today'), [ev(local(11, 1), ['今日'], { mood_emoji: '🙂' })], local(11, 1, 20))
+    const { days } = cardCalendar(config, card('today'), [ev(local(11, 1), ['今日'], { 心情: '🙂' })], local(11, 1, 20))
     expect(days).toEqual([{ date: '2026-11-01', value: '🙂', delta: null, state: 'logged' }])
   })
 })

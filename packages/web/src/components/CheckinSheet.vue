@@ -320,7 +320,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             @cancel="pad = null"
           >
             <template #aside>
-              <span class="text-xs text-zinc-500">{{ specOf.get(pad)!.unit }} · {{ t(specOf.get(pad)!.keep === 'sum' ? 'pad.sum' : 'pad.latest') }}</span>
+              <span class="text-xs text-zinc-500">{{ specOf.get(pad)!.unit }}</span>
             </template>
           </ValuePad>
           <footer v-else class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
