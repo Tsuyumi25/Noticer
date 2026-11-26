@@ -144,7 +144,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <SleepAnalysis v-if="tab === 'analysis'" class="mx-auto max-w-2xl" />
           <p v-else-if="isPending" class="p-6 text-center text-zinc-400">{{ t('common.loading') }}</p>
           <p v-else-if="isError" class="p-6 text-center text-red-600">{{ t('common.loadFailed') }}</p>
-          <div v-else class="mx-auto flex max-w-2xl flex-col gap-6 px-3 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <div v-else class="mx-auto flex max-w-2xl flex-col gap-6 px-3 pt-2" :class="floating ? 'pb-[calc(1rem+env(safe-area-inset-bottom))]' : 'pb-4'">
             <section v-for="month in months" :key="month.key">
               <h3 class="mb-2 px-1 text-base font-semibold text-zinc-800">{{ month.label }}</h3>
               <div class="grid grid-cols-7 gap-1 pb-1 text-center text-xs text-zinc-400">
@@ -167,6 +167,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             </section>
           </div>
         </div>
+        <footer v-if="!floating" class="shrink-0 border-t border-zinc-200 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <button class="h-12 w-full rounded-xl bg-indigo-600 font-semibold text-white" @click="leave">{{ t('common.ok') }}</button>
+        </footer>
       </section>
 
       <RulesSheet v-if="editingRules" :card-id="cardId" @close="editingRules = false" @deleted="leave()" />
